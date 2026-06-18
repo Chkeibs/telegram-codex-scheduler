@@ -1,0 +1,28 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+.DS_Store
+
+# Local data and transient Codex output
+data/*
+!data/.gitkeep
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+tmp/
+
+# Codex credentials must never be committed
+.codex/
+auth.json
+
+# Legacy local Firebase binding (not used by this project)
+.firebaserc
+.runtimeconfig.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

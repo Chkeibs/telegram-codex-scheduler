@@ -1,0 +1,32 @@
+{
+  "name": "telegram-codex-scheduler",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Private self-hosted Telegram scheduler for the locally authenticated Codex CLI.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "engines": {
+    "node": ">=24 <27"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/src/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "luxon": "^3.7.2",
+    "telegraf": "^4.16.3",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}

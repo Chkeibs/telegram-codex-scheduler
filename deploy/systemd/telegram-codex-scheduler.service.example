@@ -1,0 +1,21 @@
+[Unit]
+Description=Private Telegram Codex Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codexbot
+Group=codexbot
+WorkingDirectory=/opt/telegram-codex-scheduler
+EnvironmentFile=/opt/telegram-codex-scheduler/.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node /opt/telegram-codex-scheduler/dist/src/index.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
