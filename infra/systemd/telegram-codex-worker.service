@@ -22,6 +22,9 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/srv/codex/projects /home/codexworker/.codex
+RuntimeDirectory=telegram-codex-worker
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

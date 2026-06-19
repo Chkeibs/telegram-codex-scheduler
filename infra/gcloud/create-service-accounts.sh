@@ -34,6 +34,9 @@ gcloud_project projects add-iam-policy-binding "$PROJECT_ID" \
 gcloud_project projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:result-delivery@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/datastore.user" >/dev/null
+gcloud_project projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:result-delivery@$PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/eventarc.eventReceiver" >/dev/null
 
 ROLE_ID="codexWorkerWake"
 if ! gcloud_project iam roles describe "$ROLE_ID" >/dev/null 2>&1; then

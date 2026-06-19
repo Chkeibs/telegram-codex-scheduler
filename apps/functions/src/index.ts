@@ -31,7 +31,7 @@ function required(name: string): string {
   return value;
 }
 
-export const taskHandler = onRequest({ region, invoker: "private", serviceAccount: wakeFunctionServiceAccount }, async (request, response) => {
+export const taskHandler = onRequest({ region, invoker: "private", serviceAccount: wakeFunctionServiceAccount, memory: "512MiB", minInstances: 0, maxInstances: 3 }, async (request, response) => {
   const projectId = required("GCP_PROJECT_ID");
   const location = process.env.CLOUD_TASKS_LOCATION ?? region;
   const queue = process.env.CLOUD_TASKS_QUEUE ?? "codex-wakeups";
@@ -52,7 +52,7 @@ export const taskHandler = onRequest({ region, invoker: "private", serviceAccoun
   await handler(request, response);
 });
 
-export const telegramWebhook = onRequest({ region, secrets: [telegramToken, webhookSecret], serviceAccount: telegramFunctionServiceAccount }, async (request, response) => {
+export const telegramWebhook = onRequest({ region, secrets: [telegramToken, webhookSecret], serviceAccount: telegramFunctionServiceAccount, memory: "512MiB", minInstances: 0, maxInstances: 3 }, async (request, response) => {
   const expected = webhookSecret.value();
   if (request.get("X-Telegram-Bot-Api-Secret-Token") !== expected) {
     response.status(403).send("Forbidden");
@@ -80,13 +80,12 @@ export const telegramWebhook = onRequest({ region, secrets: [telegramToken, webh
       handlerUrl: config.taskHandlerUrl,
       invokerServiceAccount: config.taskInvokerServiceAccount,
     }),
-    compute: createComputeService(config.projectId, config.zone, config.instanceName),
   });
   await bot.handleUpdate(request.body);
   response.status(200).send("OK");
 });
 
-export const deliverResult = onDocumentUpdated({ region, document: "jobs/{jobId}", secrets: [telegramToken], retry: true, serviceAccount: deliveryFunctionServiceAccount }, async (event) => {
+export const deliverResult = onDocumentUpdated({ region, document: "jobs/{jobId}", secrets: [telegramToken], retry: true, serviceAccount: deliveryFunctionServiceAccount, memory: "512MiB", minInstances: 0, maxInstances: 3 }, async (event) => {
   const after = event.data?.after.data();
   if (!after || after.deliveryStatus !== "pending" || (after.status !== "completed" && after.status !== "failed")) return;
   const delivery = createResultDelivery(

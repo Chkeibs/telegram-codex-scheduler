@@ -102,7 +102,6 @@ function dependencies(): { value: CloudBotDependencies; calls: ReturnType<typeof
       scheduleWake: vi.fn(async () => "task"),
       deleteWake: vi.fn(async () => undefined),
     },
-    compute: { wake: vi.fn(async () => "started" as const) },
   } as unknown as CloudBotDependencies;
   return { value, calls };
 }
@@ -139,10 +138,9 @@ describe("cloud Telegram button flow", () => {
     await bot.handleUpdate(callbackUpdate(6, "draft:confirm"));
     expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledOnce();
     expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
-    expect(fixture.value.compute.wake).not.toHaveBeenCalled();
   });
 
-  it("queues an immediate job and wakes the worker", async () => {
+  it("queues an immediate job through the private wake task", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
     await bot.handleUpdate(messageUpdate(10, "Send message now"));
@@ -150,8 +148,8 @@ describe("cloud Telegram button flow", () => {
     await bot.handleUpdate(callbackUpdate(12, "draft:dir:default"));
     await bot.handleUpdate(callbackUpdate(13, "draft:permission:read_only"));
     await bot.handleUpdate(callbackUpdate(14, "draft:confirm"));
-    expect(fixture.value.compute.wake).toHaveBeenCalledOnce();
-    expect(fixture.value.jobs.markStarting).toHaveBeenCalledOnce();
+    expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
+    expect(fixture.value.jobs.markStarting).not.toHaveBeenCalled();
   });
 
   it("requires explicit acknowledgement before workspace-write confirmation", async () => {
@@ -166,5 +164,37 @@ describe("cloud Telegram button flow", () => {
     await bot.handleUpdate(callbackUpdate(25, "draft:permission:ack_write"));
     await bot.handleUpdate(callbackUpdate(26, "draft:confirm"));
     expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledOnce();
+  });
+
+  it("paginates pending jobs with an opaque job cursor", async () => {
+    const fixture = dependencies();
+    const cursor = "123e4567-e89b-12d3-a456-426614174000";
+    const job = {
+      id: "223e4567-e89b-12d3-a456-426614174000",
+      status: "scheduled" as const,
+      scheduledAt: new Date("2026-06-20T07:00:00.000Z"),
+      telegramUserId: "1",
+      telegramChatId: "1",
+      cloudTaskName: "task",
+      prompt: "inspect the repository",
+      workdirKey: "default",
+      filesystemPermission: "read_only" as const,
+      timezoneSnapshot: "Europe/Paris",
+    };
+    vi.mocked(fixture.value.jobs.listPageForUser)
+      .mockResolvedValueOnce({ jobs: [job], nextCursor: cursor })
+      .mockResolvedValueOnce({ jobs: [], nextCursor: null });
+    const bot = prepareBot(fixture.value, fixture.calls);
+    await bot.handleUpdate(messageUpdate(30, "My scheduled messages"));
+    expect(fixture.calls).toHaveBeenCalledWith(
+      "sendMessage",
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: [[expect.objectContaining({ callback_data: `jobs:page:${cursor}` })]],
+        }),
+      }),
+    );
+    await bot.handleUpdate(callbackUpdate(31, `jobs:page:${cursor}`));
+    expect(fixture.value.jobs.listPageForUser).toHaveBeenLastCalledWith("1", 5, cursor);
   });
 });

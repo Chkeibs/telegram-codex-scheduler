@@ -1,11 +1,9 @@
-import { execFile as nodeExecFile } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 
 export type ShutdownCommand = () => Promise<void>;
 
 export function systemShutdown(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    nodeExecFile("sudo", ["/sbin/shutdown", "-h", "now"], { shell: false }, (error) => error ? reject(error) : resolve());
-  });
+  return writeFile("/run/telegram-codex-worker/shutdown-request", new Date().toISOString(), { mode: 0o600 });
 }
 
 export class ShutdownCoordinator {

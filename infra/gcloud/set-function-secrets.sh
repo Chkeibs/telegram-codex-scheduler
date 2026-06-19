@@ -6,5 +6,5 @@ source "$SCRIPT_DIR/common.sh"
 
 echo "Firebase will now ask you to paste the Telegram bot token interactively. It will not be written to this repository."
 npx firebase functions:secrets:set TELEGRAM_BOT_TOKEN --project "$PROJECT_ID" --account "$FIREBASE_ACCOUNT"
-openssl rand -hex 32 | npx firebase functions:secrets:set TELEGRAM_WEBHOOK_SECRET --project "$PROJECT_ID" --account "$FIREBASE_ACCOUNT" --data-file -
+openssl rand -hex 32 | tr -d '\n' | npx firebase functions:secrets:set TELEGRAM_WEBHOOK_SECRET --project "$PROJECT_ID" --account "$FIREBASE_ACCOUNT" --data-file -
 echo "Function secrets created in the new dedicated project."

@@ -45,9 +45,9 @@ npm install --global @openai/codex
 
 install -o root -g root -m 0644 "$INSTALL_DIR/infra/systemd/telegram-codex-worker.service" /etc/systemd/system/telegram-codex-worker.service
 install -o root -g root -m 0644 "$INSTALL_DIR/infra/systemd/telegram-codex-watchdog.service" /etc/systemd/system/telegram-codex-watchdog.service
-printf '%s\n' 'codexworker ALL=(root) NOPASSWD: /sbin/shutdown -h now' > /etc/sudoers.d/telegram-codex-worker
-chmod 0440 /etc/sudoers.d/telegram-codex-worker
-visudo -cf /etc/sudoers.d/telegram-codex-worker
+install -o root -g root -m 0644 "$INSTALL_DIR/infra/systemd/telegram-codex-shutdown.path" /etc/systemd/system/telegram-codex-shutdown.path
+install -o root -g root -m 0644 "$INSTALL_DIR/infra/systemd/telegram-codex-shutdown.service" /etc/systemd/system/telegram-codex-shutdown.service
+rm -f /etc/sudoers.d/telegram-codex-worker
 
 if [[ ! -f "$CONFIG_DIR/workdirs.json" ]]; then
   printf '%s\n' '{"default":"/srv/codex/projects/default"}' > "$CONFIG_DIR/workdirs.json"
@@ -57,6 +57,6 @@ fi
 install -d -o codexworker -g codexworker -m 0750 "$PROJECTS_DIR/default"
 
 systemctl daemon-reload
-systemctl disable telegram-codex-worker.service telegram-codex-watchdog.service >/dev/null 2>&1 || true
+systemctl disable telegram-codex-worker.service telegram-codex-watchdog.service telegram-codex-shutdown.path >/dev/null 2>&1 || true
 
-echo "Worker software installed. Configure $CONFIG_DIR/worker.env, authenticate as codexworker, then enable both systemd units."
+echo "Worker software installed. Configure $CONFIG_DIR/worker.env, authenticate as codexworker, then enable the worker, watchdog, and shutdown path units."

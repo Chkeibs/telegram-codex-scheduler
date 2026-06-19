@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for a Telegram Codex worker shutdown request
+
+[Path]
+PathExists=/run/telegram-codex-worker/shutdown-request
+Unit=telegram-codex-shutdown.service
+
+[Install]
+WantedBy=multi-user.target

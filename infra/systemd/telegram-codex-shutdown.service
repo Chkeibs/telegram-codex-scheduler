@@ -1,0 +1,6 @@
+[Unit]
+Description=Power off the Telegram Codex worker VM after a drained run
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/shutdown -h now

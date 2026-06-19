@@ -6,7 +6,6 @@ import type { FirestoreConversationRepository, CloudDraft } from "./repositories
 import type { FirestoreJobRepository } from "./repositories/firestoreJobRepository.js";
 import type { FirestoreUserRepository, CloudUserPreferences } from "./repositories/firestoreUserRepository.js";
 import type { CloudTasksService } from "./services/cloudTasksService.js";
-import type { ComputeService } from "./services/computeService.js";
 
 const MENU = {
   schedule: "Send scheduled message",
@@ -23,7 +22,6 @@ export interface CloudBotDependencies {
   conversations: FirestoreConversationRepository;
   jobs: FirestoreJobRepository;
   tasks: CloudTasksService;
-  compute: ComputeService;
 }
 
 function mainKeyboard() {
@@ -271,10 +269,7 @@ export function createCloudTelegramBot(dependencies: CloudBotDependencies): Tele
       return;
     }
 
-    const decision = await dependencies.compute.wake();
-    if (decision === "already_running") await dependencies.jobs.markPending(result.job.id);
-    else if (decision === "retry_after_stop") await dependencies.tasks.scheduleWake(result.job.id, new Date(Date.now() + dependencies.config.wakeRetryDelaySeconds * 1000), `retry-${Date.now()}`);
-    else await dependencies.jobs.markStarting(result.job.id);
+    await dependencies.tasks.scheduleWake(result.job.id, new Date());
     await ctx.reply("🚀 Job queued. Waking the Codex worker.", mainKeyboard());
   });
 

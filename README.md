@@ -1,9 +1,50 @@
-# Telegram Codex Scheduler — Google Cloud wake-to-run blueprint
+# Telegram Codex Scheduler — Google Cloud wake-to-run
 
-> This README is the implementation contract for the next version of the project.
-> It describes the target architecture and the complete migration plan. The current
-> `main` branch still contains the original local long-polling/SQLite implementation
-> until the phases below are implemented and validated.
+> Private, self-hosted Telegram scheduler for the locally authenticated Codex CLI.
+> The cloud implementation lives on `codex/google-cloud-wake-worker`; `main` and the
+> `local-sqlite-v1` tag retain the earlier always-on SQLite edition as a rollback.
+> Never put a Telegram token, Codex credential, Google refresh token, or service-account
+> key in this repository.
+
+## 0. Implementation status
+
+The wake-to-run architecture described here is implemented. The repository contains
+the Firebase Functions control plane, Firestore repositories and rules, Cloud Tasks
+scheduling, the Compute Engine worker, systemd shutdown/watchdog units, guarded
+provisioning scripts, rollback/teardown scripts, and automated tests.
+
+The reference deployment was validated on 19 June 2026 with this cold-boot path:
+
+```text
+Telegram button flow -> Cloud Task -> TERMINATED VM starts -> systemd worker
+-> codex exec --ephemeral --sandbox read-only -> Firestore result
+-> Telegram notification -> drain grace -> VM returns to TERMINATED
+```
+
+The immediate and scheduled real smoke outputs were `CLOUD_E2E_OK` and
+`CLOUD_SCHEDULED_E2E_OK`. Each was executed exactly once, delivered to Telegram, and
+followed by an automatic VM shutdown. No deployment-specific project ID,
+account number, bot token, webhook secret, or Codex auth file is committed.
+
+Verified local gates on Node.js 24:
+
+- strict TypeScript typecheck;
+- production build of the local app, shared package, Functions, and worker;
+- 58 unit/integration tests;
+- 5 Firestore Emulator transaction tests;
+- real subprocess success, failure, output-bound, injection, and timeout tests;
+- cold-VM real Codex execution and result delivery;
+- cost-resource inventory with the idle VM in `TERMINATED`.
+
+`npm audit` currently reports moderate advisories in transitive Google/Firebase
+packages and no high/critical advisory. npm's proposed forced remedy downgrades a
+Google Cloud package across a breaking major version, so it is not applied blindly.
+Recheck on every release and upgrade when the upstream dependency graph contains a
+compatible fix.
+
+This is still self-hosted infrastructure, not a hosted service. Every operator must
+create a new dedicated Firebase/Google Cloud project, create their own BotFather bot,
+authenticate Codex locally on their own VM, review current prices, and monitor billing.
 
 ## 1. Executive summary
 
@@ -27,7 +68,7 @@ Firebase Function: telegramWebhook
    |
    +--> Cloud Tasks: scheduled wake-up
    |
-   +--> Firebase Function: wakeWorker
+   +--> private Firebase Function: taskHandler
                               |
                               | Compute Engine API: instances.start
                               v
@@ -171,26 +212,28 @@ Cloud Tasks is preferred over a function that polls Firestore every minute:
 
 Reference: [Cloud Tasks pricing](https://cloud.google.com/tasks/pricing).
 
-## 4. Current state and target state
+## 4. Implemented cloud state and retained rollback
 
-| Concern | Current implementation | Target implementation |
+| Concern | Retained local release | Implemented cloud release |
 | --- | --- | --- |
-| Telegram transport | Telegraf long polling | Telegraf webhook in Firebase Function |
-| Runtime | One always-running Node process | Serverless control plane + ephemeral VM worker |
-| Database | Local SQLite | Firestore |
-| Scheduling | SQLite polling every 30 seconds | Cloud Tasks scheduled delivery |
-| Codex execution | Same process launches `codex exec` | VM worker launches `codex exec` |
-| Result delivery | Bot process calls Telegram | Firestore trigger or delivery function calls Telegram |
-| Conversation state | SQLite table | Firestore document with expiry |
-| Authentication | Local Codex login | Local Codex login on persistent VM disk |
-| Infrastructure | Local/systemd/Oracle docs | Firebase + Compute Engine + systemd |
-| Power management | Host stays on | Function starts VM; worker stops VM |
-| Secrets | `.env` | Secret Manager + local VM-only Codex credentials |
+| Telegram transport | Telegraf long polling | Telegraf webhook in a Gen 2 Function |
+| Runtime | One always-running Node process | Serverless control plane + normally stopped VM |
+| Database | Local SQLite | Firestore Native mode |
+| Scheduling | SQLite poll every 30 seconds | Deterministic authenticated Cloud Tasks |
+| Codex execution | Local process | Dedicated VM worker using `spawn`, never a shell |
+| Result delivery | Polling bot process | Firestore Eventarc trigger |
+| Conversation state | SQLite with TTL | Firestore document with TTL semantics |
+| Authentication | Local Codex login | VM-local Codex login on persistent disk |
+| Power management | Host stays on | Private task handler starts VM; systemd stops it |
+| Secrets | Local `.env` | Telegram secrets in Secret Manager; Codex auth only on VM |
 
-## 5. Target repository structure
+The legacy local implementation remains in `src/` and is tagged
+`local-sqlite-v1`. It is not the authoritative database for cloud mode.
 
-The migration will convert the repository to npm workspaces while preserving
-shared TypeScript types and validation.
+## 5. Implemented repository structure
+
+The repository is an npm-workspaces monorepo. Generated `dist/`, Function `lib/`,
+local project environment files, emulator logs, and credentials are ignored.
 
 ```text
 .
@@ -199,18 +242,11 @@ shared TypeScript types and validation.
 │   │   ├── src/
 │   │   │   ├── index.ts
 │   │   │   ├── config.ts
-│   │   │   ├── telegramWebhook.ts
-│   │   │   ├── wakeWorker.ts
+│   │   │   ├── telegramBot.ts
 │   │   │   ├── deliverResult.ts
 │   │   │   ├── taskHandler.ts
-│   │   │   ├── handlers/
 │   │   │   ├── repositories/
-│   │   │   ├── services/
-│   │   │   │   ├── computeService.ts
-│   │   │   │   ├── cloudTasksService.ts
-│   │   │   │   ├── telegramService.ts
-│   │   │   │   └── secretService.ts
-│   │   │   └── middleware/
+│   │   │   └── services/
 │   │   ├── test/
 │   │   ├── package.json
 │   │   └── tsconfig.json
@@ -220,11 +256,11 @@ shared TypeScript types and validation.
 │       │   ├── config.ts
 │       │   ├── workerLoop.ts
 │       │   ├── codexRunner.ts
-│       │   ├── jobClaimer.ts
+│       │   ├── firestoreJobRepository.ts
 │       │   ├── shutdownCoordinator.ts
 │       │   ├── pathPolicy.ts
 │       │   ├── outputSanitizer.ts
-│       │   └── heartbeat.ts
+│       │   └── resultArtifactStore.ts
 │       ├── test/
 │       ├── package.json
 │       └── tsconfig.json
@@ -234,9 +270,7 @@ shared TypeScript types and validation.
 │       │   ├── domain.ts
 │       │   ├── jobStateMachine.ts
 │       │   ├── dateParser.ts
-│       │   ├── telegramCallbacks.ts
-│       │   ├── validation.ts
-│       │   └── constants.ts
+│       │   └── validation.ts
 │       ├── test/
 │       └── package.json
 ├── infra/
@@ -244,26 +278,24 @@ shared TypeScript types and validation.
 │   ├── firestore.rules
 │   ├── firebase.json
 │   ├── gcloud/
+│   │   ├── create-dedicated-project.sh
 │   │   ├── enable-apis.sh
-│   │   ├── create-service-accounts.sh
-│   │   ├── create-task-queue.sh
-│   │   └── create-vm.sh
+│   │   ├── create-{firestore,service-accounts,task-queue,results-bucket,vm}.sh
+│   │   ├── deploy-functions.sh
+│   │   ├── register-webhook.sh
+│   │   ├── verify-deployment.sh
+│   │   ├── rollback-to-local.sh
+│   │   └── teardown-dedicated-project.sh
+│   ├── vm/
+│   │   └── install-worker.sh
 │   └── systemd/
 │       ├── telegram-codex-worker.service
-│       └── telegram-codex-watchdog.service
-├── scripts/
-│   ├── set-telegram-webhook.ts
-│   ├── delete-telegram-webhook.ts
-│   ├── smoke-test-wake.ts
-│   └── estimate-monthly-cost.ts
-├── docs/
-│   ├── runbooks/
-│   │   ├── vm-will-not-start.md
-│   │   ├── worker-stuck.md
-│   │   ├── codex-auth-expired.md
-│   │   └── telegram-delivery-failed.md
-│   ├── threat-model.md
-│   └── migration-notes.md
+│       ├── telegram-codex-watchdog.service
+│       ├── telegram-codex-shutdown.path
+│       └── telegram-codex-shutdown.service
+├── src/                         # retained local SQLite release
+├── tests/                       # retained local test suite
+├── .github/workflows/ci.yml     # Node 24 + Java 21 validation
 ├── .env.example
 ├── .gitignore
 ├── firebase.json
@@ -272,8 +304,8 @@ shared TypeScript types and validation.
 └── LICENSE
 ```
 
-The exact split may be adjusted during implementation, but the control plane,
-shared domain package, and worker must remain independently testable.
+The control plane, shared domain package, worker, and retained local release are
+independently typechecked and tested.
 
 ## 6. Detailed runtime flows
 
@@ -361,20 +393,23 @@ return the previously generated response without creating another job.
 The dangerous race is a new job arriving after the worker sees an empty queue but
 before the VM reaches `TERMINATED`.
 
-The shutdown protocol will be:
+The implemented shutdown protocol is:
 
 1. Worker writes `workerState = draining` with a lease expiry.
 2. Worker waits `DRAIN_GRACE_SECONDS`, initially 60 seconds.
 3. Worker rechecks claimable jobs transactionally.
 4. If work exists, it clears draining and continues.
-5. If no work exists, it writes `workerState = stopping` and calls `shutdown -h now`.
-6. The wake function treats `STOPPING` as a delayed-start condition and creates a
+5. If no work exists, it writes `workerState = stopping` and creates a private
+   `/run/telegram-codex-worker/shutdown-request` marker.
+6. A root-owned systemd path unit observes only that marker and calls
+   `shutdown -h now`; the worker retains `NoNewPrivileges=true` and no sudo rule.
+7. The task handler treats `STOPPING` as a delayed-start condition and creates a
    short Cloud Task retry rather than issuing an immediate conflicting start.
-7. The retry checks the state again and starts the VM once it is `TERMINATED`.
+8. The retry checks the state again and starts the VM once it is `TERMINATED`.
 
 ## 7. Firestore data model
 
-Firestore security rules will deny all client-side access. Only trusted server
+Firestore security rules deny all client-side access. Only trusted server
 service accounts use the Admin SDK. The project has no public Firebase web client.
 
 ### 7.1 `users/{telegramUserId}`
@@ -570,7 +605,7 @@ Create separate service accounts:
 | `telegram-webhook-sa` | Telegram ingress and Firestore state | Firestore read/write, Cloud Tasks enqueue, Telegram secret access |
 | `wake-worker-sa` | Internal VM start handler | `compute.instances.get`, `compute.instances.start`, task enqueue for retry |
 | `cloud-tasks-invoker-sa` | Signs scheduled task requests | Invoke only the internal task function |
-| `codex-worker-sa` | VM identity | Read/claim/update jobs and worker state only |
+| `codex-worker` | VM identity | Read/claim/update jobs and worker state only |
 | `result-delivery-sa` | Telegram result sender | Read delivery data, update delivery state, Telegram secret access |
 
 Implementation requirements:
@@ -671,9 +706,12 @@ CODEX_BIN=/usr/local/bin/codex
 CODEX_TIMEOUT_SECONDS=1800
 MAX_CODEX_OUTPUT_BYTES=1048576
 WORKER_POLL_SECONDS=5
+WORKER_LEASE_SECONDS=2100
+WORKER_HEARTBEAT_SECONDS=30
 DRAIN_GRACE_SECONDS=60
 WORKER_MAX_BOOT_SECONDS=3600
 WORKDIR_CONFIG_PATH=/etc/telegram-codex-scheduler/workdirs.json
+WORKER_DISABLE_SHUTDOWN=false
 ```
 
 `workdirs.json` example:
@@ -690,8 +728,10 @@ Telegram must never be able to modify it.
 
 ## 11. Detailed implementation roadmap
 
-Every phase below ends with a measurable exit criterion. A later phase must not
-start if its required earlier criterion is red.
+These phases were used to implement the cloud release and are retained as a
+reproducible engineering/audit plan. Every phase ends with a measurable exit
+criterion; when repeating the deployment, do not advance while an earlier required
+criterion is red.
 
 ### Phase 0 — Freeze the baseline and record decisions
 
@@ -998,7 +1038,7 @@ Create a persistent but normally stopped worker with controlled recurring cost.
 - External address: ephemeral only if needed for outbound connectivity.
 - No static IP.
 - No GPU, Local SSD, load balancer, Cloud NAT, or extra data disk.
-- Attached identity: `codex-worker-sa`.
+- Attached identity: `codex-worker`.
 - Deletion protection during setup, reviewed after backups exist.
 
 #### Micro-steps
@@ -1343,13 +1383,15 @@ Every merge must pass:
 ```bash
 npm ci
 npm run typecheck
-npm test
 npm run build
+npm test
+npm run test:emulators
+npm audit --omit=dev --audit-level=high
 ```
 
-Cloud emulator tests must run in CI once the Firebase workspace exists. CI must
-use mocks/emulators and must never require real Telegram, OpenAI, or Google Cloud
-production credentials for ordinary pull requests.
+CI uses mocks/emulators and never requires real Telegram, OpenAI, or Google Cloud
+production credentials for ordinary pull requests. Moderate advisories remain visible;
+the gate fails on high or critical production advisories.
 
 ## 13. Cost model
 
@@ -1371,7 +1413,7 @@ fresh review of the official calculator before creating resources.
 
 ### 13.2 Approximate VM rates used for planning
 
-Approximate US on-demand rates at the time this blueprint was written:
+Approximate US on-demand inputs rechecked on 19 June 2026:
 
 | Machine | RAM | VM rate | External IPv4 while running | Approx. combined |
 | --- | ---: | ---: | ---: | ---: |
@@ -1381,6 +1423,13 @@ Approximate US on-demand rates at the time this blueprint was written:
 
 External IPv4 pricing reference:
 [VPC network pricing](https://cloud.google.com/vpc/network-pricing).
+
+`e2-medium` compute is **not** an Always Free VM. It is billed only while running;
+the ephemeral IPv4 is released and no longer billed while the VM is stopped. The
+30 GiB standard disk can be covered by the Compute Engine Free Tier only when the
+billing account, region, and aggregate usage remain eligible. Never infer eligibility
+solely from this README—check the current Billing report and
+[Google Cloud Free Tier limits](https://docs.cloud.google.com/free/docs/free-cloud-features).
 
 ### 13.3 Example monthly costs
 
@@ -1397,6 +1446,10 @@ quotas:
 These estimates exclude taxes, currency conversion, Codex/ChatGPT subscription
 or API charges, unexpected network transfer, non-free disk choices, snapshots,
 and resources created outside the blueprint.
+
+For the deployed default, `estimate-monthly-cost.sh` reports approximately **$0.39
+per month** for 10 powered-on hours, plus **$0 to $1.20** for the persistent disk
+depending on Free Tier eligibility. This is a planning range, not a price guarantee.
 
 ### 13.4 Fixed-cost traps to avoid
 
@@ -1502,38 +1555,297 @@ Before production acceptance, the following runbooks must exist and be exercised
 - Remove only confirmed unwanted resources.
 - Record the root cause and add a preventive test or policy.
 
+### 15.7 Function starts then crashes for memory
+
+- Confirm all three Gen 2 Functions have 512 MiB; the bundled Firebase/Google clients
+  can exceed a 256 MiB cold-start limit.
+- Keep `minInstances=0` and bound `maxInstances`; do not solve this by leaving warm
+  instances permanently enabled.
+- Inspect Cloud Run revision logs without printing request bodies or secrets.
+
+### 15.8 Job completes but Telegram delivery remains pending
+
+- Confirm the Firestore Eventarc trigger identity is `result-delivery@PROJECT_ID`.
+- Confirm that identity has `roles/eventarc.eventReceiver` and `roles/run.invoker` on
+  only the `deliverresult` Cloud Run service.
+- Confirm it can access `TELEGRAM_BOT_TOKEN` but not the webhook secret.
+- Fix IAM and allow Eventarc retry; never rerun Codex merely because notification
+  delivery failed.
+
+### 15.9 Webhook returns 403 after deployment
+
+- Confirm Telegram's `secret_token` and Secret Manager's latest webhook-secret version
+  match byte-for-byte.
+- A generated secret must not contain a trailing newline. The supplied script strips
+  it before upload.
+- Requests without the `X-Telegram-Bot-Api-Secret-Token` header must continue to get
+  `403`; do not make the function accept anonymous unsigned updates.
+
+### 15.10 Worker finishes but VM remains running
+
+- Inspect `telegram-codex-worker`, `telegram-codex-shutdown.path`, and
+  `telegram-codex-shutdown.service` with `systemctl status`.
+- Confirm `/run/telegram-codex-worker` is created by `RuntimeDirectory=` and owned by
+  `codexworker`.
+- Do not give Codex or the worker blanket sudo. The root path unit is the privilege
+  boundary for poweroff.
+- Stop the VM from Compute Engine while diagnosing so costs stay bounded.
+
 ## 16. Deployment sequence
 
-The final production deployment must follow this order:
+The scripts are deliberately guarded. Every mutating script requires an explicit
+new project ID and `CONFIRM_NEW_DEDICATED_PROJECT=yes`; project creation refuses an
+ID that already exists. Firebase CLI calls also require an explicit account. Do not
+set a global default project as a shortcut.
 
-1. Green local unit tests.
-2. Green Firestore Emulator tests.
-3. Provision staging Firebase project resources.
-4. Deploy staging Functions.
-5. Register staging Telegram webhook.
-6. Provision staging worker VM.
-7. Authenticate Codex on staging VM.
-8. Complete mock Codex cold-boot test.
-9. Complete real read-only Codex cold-boot test.
-10. Verify automatic shutdown.
-11. Complete scheduled-job test.
-12. Complete cancellation and duplicate-delivery tests.
-13. Complete failure and watchdog tests.
-14. Review staging cost dashboard.
-15. Provision or configure production resources.
-16. Deploy production Functions without switching webhook.
-17. Stop the old long-polling bot.
-18. Register production webhook.
-19. Execute one immediate read-only smoke job.
-20. Execute one scheduled smoke job.
-21. Verify production VM returns to `TERMINATED`.
-22. Observe logs and billing for at least one full cycle.
-23. Tag the cloud release.
-24. Start the rollback-window clock before deleting obsolete paths.
+### 16.1 Prerequisites on the operator machine
+
+Install:
+
+- Git;
+- Node.js 24 LTS and npm;
+- Google Cloud CLI (`gcloud`);
+- Firebase CLI (the project uses `npx firebase`, so a global install is optional);
+- Java 21 only for Firestore Emulator tests;
+- `curl`, OpenSSL, and a POSIX shell.
+
+Then authenticate interactively with the account that will own the new project:
+
+```bash
+gcloud auth login
+npx firebase login:add
+gcloud auth list
+npx firebase login:list
+```
+
+Authentication codes belong only in the Google/Firebase browser prompt. Never paste
+them into `.env`, Telegram, GitHub, an issue, or a commit.
+
+Clone and select the cloud branch:
+
+```bash
+git clone https://github.com/OWNER/telegram-codex-scheduler.git
+cd telegram-codex-scheduler
+git switch codex/google-cloud-wake-worker
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run test:emulators
+```
+
+### 16.2 Create local deployment configuration
+
+Create an ignored `.env.deployment.local` in the repository root. Choose a globally
+unique project ID that has never existed, and verify the billing account yourself:
+
+```dotenv
+PROJECT_ID=replace-with-a-new-dedicated-project-id
+PROJECT_NAME=Telegram Codex Scheduler
+FIREBASE_ACCOUNT=you@example.com
+BILLING_ACCOUNT_ID=000000-000000-000000
+REGION=us-central1
+FIRESTORE_LOCATION=us-central1
+ZONE=us-central1-a
+INSTANCE_NAME=telegram-codex-worker
+CONFIRM_NEW_DEDICATED_PROJECT=yes
+TELEGRAM_ALLOWED_USER_IDS=123456789
+RESULTS_BUCKET=replace-with-a-new-dedicated-project-id-codex-results
+```
+
+Get your numeric Telegram ID from a trusted method and allowlist only intended users.
+The file is covered by `.gitignore`; confirm with `git check-ignore` before continuing:
+
+```bash
+git check-ignore .env.deployment.local
+set -a
+source .env.deployment.local
+set +a
+```
+
+### 16.3 Create only the dedicated project and cost guardrails
+
+Run in this exact order:
+
+```bash
+./infra/gcloud/create-dedicated-project.sh
+./infra/gcloud/enable-apis.sh
+BUDGET_AMOUNT=10 ./infra/gcloud/create-budget.sh
+./infra/gcloud/create-firestore.sh
+./infra/gcloud/create-service-accounts.sh
+./infra/gcloud/create-task-queue.sh
+./infra/gcloud/create-results-bucket.sh
+```
+
+The budget amount is in the billing account's currency. A budget sends alerts; it is
+not a hard spending cap. Confirm recipients and thresholds in Billing. Firestore
+location cannot be casually changed later, so choose it before running the database
+creation command.
+
+The service accounts use attached identities only. Do not create or download JSON
+keys. The result bucket blocks public access and deletes `result-artifacts/` objects
+after one day.
+
+### 16.4 Create the normally stopped worker VM
+
+Review current Compute Engine and external IPv4 prices before creation. The tested
+default is an `e2-medium`, Ubuntu 24.04, 30 GiB `pd-standard`, in `us-central1`:
+
+```bash
+MACHINE_TYPE=e2-medium ./infra/gcloud/create-vm.sh
+```
+
+The script creates a dedicated VPC/subnet, permits SSH only from Google's IAP range,
+uses an ephemeral external IPv4, attaches the `codex-worker` identity, and enables
+deletion protection. It creates no static IP, NAT gateway, load balancer, Cloud SQL,
+GPU, Local SSD, or extra data disk.
+
+### 16.5 Install the worker
+
+SSH through IAP:
+
+```bash
+gcloud compute ssh "$INSTANCE_NAME" \
+  --project="$PROJECT_ID" \
+  --zone="$ZONE" \
+  --tunnel-through-iap
+```
+
+On the VM, clone a disposable bootstrap copy, then run the installer as root with
+your repository and release branch:
+
+```bash
+git clone --branch codex/google-cloud-wake-worker --depth 1 \
+  https://github.com/OWNER/telegram-codex-scheduler.git \
+  /tmp/telegram-codex-bootstrap
+sudo env \
+  REPOSITORY_URL=https://github.com/OWNER/telegram-codex-scheduler.git \
+  BRANCH=codex/google-cloud-wake-worker \
+  bash /tmp/telegram-codex-bootstrap/infra/vm/install-worker.sh
+rm -rf /tmp/telegram-codex-bootstrap
+```
+
+Copy `infra/vm/worker.env.example` to
+`/etc/telegram-codex-scheduler/worker.env`, replace placeholders, then enforce:
+
+```bash
+sudo chown root:codexworker /etc/telegram-codex-scheduler/worker.env
+sudo chmod 0640 /etc/telegram-codex-scheduler/worker.env
+sudo chown root:codexworker /etc/telegram-codex-scheduler/workdirs.json
+sudo chmod 0640 /etc/telegram-codex-scheduler/workdirs.json
+```
+
+`workdirs.json` is the only Telegram-to-filesystem mapping. Paths must be absolute,
+real directories under `/srv/codex/projects`; Telegram users choose keys, never raw
+server paths.
+
+### 16.6 Authenticate Codex locally on the VM
+
+Run authentication as the exact systemd user:
+
+```bash
+sudo -iu codexworker codex login --device-auth
+sudo -iu codexworker codex login status
+sudo -iu codexworker bash -lc \
+  'cd /srv/codex/projects/default && codex exec --ephemeral --sandbox read-only --ask-for-approval never --skip-git-repo-check "Reply with VM_CODEX_OK only"'
+```
+
+Complete the browser step yourself. The bot never receives this code or the resulting
+Codex authentication. Verify `/home/codexworker/.codex` is mode `0700` and its auth
+file is `0600`. Do not upload that directory to Secret Manager, Firebase, GitHub, or
+Telegram.
+
+Enable the three boot services:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-codex-worker.service
+sudo systemctl enable telegram-codex-watchdog.service
+sudo systemctl enable telegram-codex-shutdown.path
+sudo systemctl start telegram-codex-shutdown.path
+```
+
+The worker retains `NoNewPrivileges=true`. It writes a request inside its private
+`/run` directory; the root-owned shutdown path/service performs poweroff. The worker
+has no sudo rule. The watchdog independently schedules a hard stop after 65 minutes.
+
+### 16.7 Create secrets and deploy the serverless control plane
+
+Back on the operator machine, with the deployment environment loaded:
+
+```bash
+./infra/gcloud/set-function-secrets.sh
+./infra/gcloud/deploy-functions.sh
+./infra/gcloud/register-webhook.sh
+./infra/gcloud/verify-deployment.sh
+```
+
+`set-function-secrets.sh` asks for the BotFather token interactively and generates the
+webhook secret locally without a trailing newline. The deployment uses Node.js 24,
+512 MiB, min instances `0`, max instances `3`, deny-all Firestore client rules, and
+least-privilege execution identities. The private task handler can be invoked only by
+`cloud-tasks-invoker`; Eventarc uses `result-delivery` to invoke the result function.
+
+Check Telegram's webhook without printing the token:
+
+```bash
+./infra/gcloud/register-webhook.sh
+# Then open the bot in Telegram and run /start.
+```
+
+### 16.8 Cold-boot acceptance test
+
+First stop the VM and wait for the terminal state:
+
+```bash
+gcloud compute instances stop "$INSTANCE_NAME" \
+  --project="$PROJECT_ID" --zone="$ZONE" --quiet
+gcloud compute instances describe "$INSTANCE_NAME" \
+  --project="$PROJECT_ID" --zone="$ZONE" --format='value(status)'
+```
+
+The output must be `TERMINATED`. In Telegram:
+
+1. choose **Send message now**;
+2. enter `CLOUD_E2E_OK`;
+3. choose the default project;
+4. choose **Read-only**;
+5. confirm;
+6. observe the queue notification, then the exact Codex result;
+7. wait through the drain grace and verify the VM returns to `TERMINATED`;
+8. schedule another read-only job several minutes ahead and verify the same full cycle;
+9. create then cancel a future job and verify the VM never starts for it.
+
+Do not press confirmation twice to “help” a slow boot. Confirmation is idempotent,
+but cold boot plus Codex can legitimately take several minutes.
+
+### 16.9 Final audit and cost estimate
+
+```bash
+./infra/gcloud/verify-deployment.sh
+POWERED_ON_HOURS_PER_MONTH=10 ./infra/gcloud/estimate-monthly-cost.sh
+git status --short
+```
+
+Expected idle audit: VM `TERMINATED`; no reserved address; no NAT gateway; no
+forwarding rule/load balancer; no Cloud SQL; 30 GiB standard disk; one-day result
+lifecycle; public access prevention enabled. Re-run this audit monthly and whenever a
+billing alert fires.
 
 ## 17. Rollback plan
 
 Rollback remains possible until the local runtime is deliberately retired.
+
+Load the dedicated deployment environment, then require the project ID a second
+time so a typo cannot silently target another installation:
+
+```bash
+set -a
+source .env.deployment.local
+set +a
+export CONFIRM_ROLLBACK_PROJECT_ID="$PROJECT_ID"
+./infra/gcloud/rollback-to-local.sh
+```
 
 1. Prevent new cloud job creation.
 2. Stop the worker VM.
@@ -1546,9 +1858,27 @@ Rollback remains possible until the local runtime is deliberately retired.
 9. Leave cloud resources intact for diagnosis unless they are causing cost.
 10. After diagnosis, either resume the cloud rollout or execute the teardown plan.
 
+To resume cloud intake after reconciliation, run `register-webhook.sh` again. Never
+run the local long-polling bot while the cloud webhook is still active.
+
 ## 18. Teardown plan
 
 The project is not complete until a safe no-surprise teardown is documented.
+
+The guarded fast path deletes the entire *dedicated* project. It intentionally
+refuses to run unless the confirmation exactly matches `PROJECT_ID`:
+
+```bash
+set -a
+source .env.deployment.local
+set +a
+export CONFIRM_DELETE_PROJECT_ID="$PROJECT_ID"
+./infra/gcloud/teardown-dedicated-project.sh
+```
+
+Before entering that confirmation, export any records you are legally or
+operationally required to retain. Project deletion is destructive and must never be
+used if unrelated resources were placed in the project.
 
 1. Delete Telegram webhook or redirect it to the retained deployment.
 2. Stop and delete the worker VM.
@@ -1569,61 +1899,65 @@ The project is not complete until a safe no-surprise teardown is documented.
 
 ### Functional
 
-- [ ] `/start` and all menus work while VM is stopped.
-- [ ] Immediate job wakes a stopped VM.
-- [ ] Scheduled job wakes the VM at the expected time.
-- [ ] Custom timezone displays correctly.
-- [ ] Cancellation prevents execution.
-- [ ] Job listing is paginated.
-- [ ] Read-only is default.
-- [ ] Workspace-write requires warning and confirmation.
-- [ ] Result reaches Telegram.
-- [ ] VM stops after queue drain.
+- [x] `/start` and all menus work while VM is stopped.
+- [x] Immediate job wakes a stopped VM.
+- [x] Scheduled job wakes the VM at the expected time.
+- [x] Custom timezone displays correctly.
+- [x] Cancellation prevents execution.
+- [x] Job listing is paginated.
+- [x] Read-only is default.
+- [x] Workspace-write requires warning and confirmation.
+- [x] Result reaches Telegram.
+- [x] VM stops after queue drain.
 
 ### Reliability
 
-- [ ] Duplicate updates cannot duplicate jobs.
-- [ ] Duplicate wake requests are harmless.
-- [ ] Concurrent workers cannot duplicate claims.
-- [ ] Stale running jobs are not rerun automatically.
-- [ ] Telegram delivery failure does not rerun Codex.
-- [ ] Job arriving during shutdown is eventually executed.
-- [ ] VM watchdog enforces maximum runtime.
+- [x] Duplicate updates cannot duplicate jobs.
+- [x] Duplicate wake requests are harmless.
+- [x] Concurrent workers cannot duplicate claims.
+- [x] Stale running jobs are not rerun automatically.
+- [x] Telegram delivery failure does not rerun Codex.
+- [x] Job arriving during shutdown creates an idempotent delayed wake.
+- [x] VM watchdog installs an independent maximum-runtime poweroff timer.
 
 ### Security
 
-- [ ] Webhook secret is validated.
-- [ ] Telegram user allowlist is enforced first.
-- [ ] Firestore client rules deny all access.
-- [ ] No service-account keys exist.
-- [ ] Telegram token exists only in Secret Manager/function binding.
-- [ ] Codex credentials exist only on the VM under the worker user.
-- [ ] VM never receives Telegram token.
-- [ ] Function never receives Codex auth files.
-- [ ] Worker has no shell interpolation.
-- [ ] Working-directory mapping is operator-controlled.
-- [ ] Secret redaction and output bounds are tested.
+- [x] Webhook secret is validated; unsigned calls return `403`.
+- [x] Telegram user allowlist is enforced first.
+- [x] Firestore client rules deny all access.
+- [x] No user-managed service-account keys exist.
+- [x] Telegram token in the cloud runtime is a Secret Manager binding.
+- [x] Codex credentials exist only on the VM under the worker user.
+- [x] VM never receives Telegram token.
+- [x] Function never receives Codex auth files.
+- [x] Worker has no shell interpolation.
+- [x] Working-directory mapping is operator-controlled.
+- [x] Secret redaction and output bounds are tested.
 
 ### Cost
 
-- [ ] Blaze billing is enabled intentionally.
-- [ ] Budget alerts are configured.
-- [ ] VM machine type and region are reviewed.
-- [ ] Boot disk type and size are reviewed.
-- [ ] No static IPv4 exists.
-- [ ] No Cloud NAT, load balancer, Cloud SQL, GPU, or Local SSD exists.
-- [ ] Artifact cleanup is configured.
-- [ ] Idle VM state is `TERMINATED`.
-- [ ] Monthly cost estimate script matches the deployed configuration.
+- [x] Blaze billing is enabled intentionally.
+- [x] Budget alerts are configured.
+- [x] VM machine type and region are reviewed.
+- [x] Boot disk type and size are reviewed.
+- [x] No static IPv4 exists.
+- [x] No Cloud NAT, load balancer, Cloud SQL, GPU, or Local SSD exists.
+- [x] Artifact and result cleanup policies are configured.
+- [x] Idle VM state is `TERMINATED`.
+- [x] Monthly cost estimate script reads the deployed VM/disk configuration.
 
 ### Documentation
 
-- [ ] Clean deployment guide is tested.
-- [ ] Rollback guide is tested.
-- [ ] Teardown guide is tested.
-- [ ] Authentication-expiry runbook is tested.
-- [ ] Unexpected-cost runbook is tested.
-- [ ] Public README contains no private project IDs or credentials.
+- [x] Clean deployment sequence was exercised in a brand-new dedicated project.
+- [x] Rollback removed the webhook/stopped intake and webhook restoration succeeded.
+- [x] Teardown and rollback refuse mismatched project confirmations.
+- [x] Authentication-expiry runbook includes local reauthentication and smoke checks.
+- [x] Unexpected-cost inventory script was exercised against the deployment.
+- [x] Public README contains no private project IDs or credentials.
+
+The destructive final project-deletion command is intentionally not executed against
+the live reference installation. Its exact-ID refusal path is tested; operators should
+exercise full deletion only in a disposable project or when they truly intend teardown.
 
 ## 20. Definition of done
 
@@ -1666,19 +2000,24 @@ Constraints:
 - Add protocol compatibility tests before each Codex upgrade.
 - Keep `codex exec` as the fallback execution mode.
 
-## 22. Immediate next action after this blueprint
+## 22. Release and maintenance workflow
 
-The first implementation pull request should contain only Phase 0 and Phase 2:
+For each release:
 
-1. tag and preserve the current local release;
-2. create the workspace structure;
-3. extract shared types and pure utilities;
-4. keep the local app behavior unchanged;
-5. keep all current tests green;
-6. add no Google Cloud mutation yet.
+1. update dependencies intentionally and review advisories;
+2. run typecheck, build, 58+ unit tests, and Firestore Emulator tests on Node 24;
+3. deploy Functions to the explicit dedicated project/account;
+4. update the VM checkout and rebuild before the next wake;
+5. run one mocked worker smoke test;
+6. run one real read-only cold-boot job;
+7. verify Telegram delivery and automatic `TERMINATED` state;
+8. run the cost-resource audit;
+9. inspect the diff for secrets and deployment-specific identifiers;
+10. tag the release only after every gate is green.
 
-This keeps the first change reversible and gives every later cloud phase a stable
-code structure.
+Codex CLI, Firebase, Google Cloud prices, free quotas, and IAM behavior can change.
+Pin and test upgrades; never assume a previous price estimate or authentication flow
+is permanent.
 
 ## 23. License
 
