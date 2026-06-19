@@ -2,6 +2,10 @@
   "name": "telegram-codex-scheduler",
   "version": "1.0.0",
   "private": false,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "description": "Private self-hosted Telegram scheduler for the locally authenticated Codex CLI.",
   "type": "module",
   "main": "dist/src/index.js",
@@ -9,12 +13,18 @@
     "node": ">=24 <27"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build:shared && npm run build:functions && npm run build:worker && npm run build:local",
+    "build:local": "tsc -p tsconfig.json",
+    "build:shared": "npm run build -w @telegram-codex/shared",
+    "build:functions": "npm run build -w @telegram-codex/functions",
+    "build:worker": "npm run build -w @telegram-codex/worker",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/src/index.js",
-    "test": "vitest run",
+    "test": "npm run test:local && npm run test -w @telegram-codex/shared && npm run test -w @telegram-codex/functions && npm run test -w @telegram-codex/worker",
+    "test:local": "vitest run",
+    "test:emulators": "firebase emulators:exec --only firestore --project demo-telegram-codex-scheduler \"npm run test:emulators -w @telegram-codex/functions\"",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "npm run typecheck -w @telegram-codex/shared && npm run typecheck -w @telegram-codex/functions && npm run typecheck -w @telegram-codex/worker && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -25,6 +35,7 @@
   "devDependencies": {
     "@types/luxon": "^3.7.1",
     "@types/node": "^24.10.1",
+    "firebase-tools": "^15.22.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"

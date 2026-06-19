@@ -1,0 +1,27 @@
+[Unit]
+Description=Telegram Codex ephemeral worker
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=10m
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=codexworker
+Group=codexworker
+WorkingDirectory=/opt/telegram-codex-scheduler
+EnvironmentFile=/etc/telegram-codex-scheduler/worker.env
+ExecStart=/usr/bin/node /opt/telegram-codex-scheduler/apps/worker/dist/index.js
+Restart=on-failure
+RestartSec=10s
+RuntimeMaxSec=1h
+TimeoutStopSec=30s
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/codex/projects /home/codexworker/.codex
+
+[Install]
+WantedBy=multi-user.target

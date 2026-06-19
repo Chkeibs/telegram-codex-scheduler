@@ -1,0 +1,11 @@
+[Unit]
+Description=Force-stop a stale Telegram Codex worker VM
+After=telegram-codex-worker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-run --unit=telegram-codex-hard-stop --on-active=65m /sbin/shutdown -h now
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

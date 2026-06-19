@@ -1,11 +1,19 @@
 node_modules/
 dist/
+apps/*/dist/
+apps/*/lib/
+packages/*/dist/
 coverage/
 .env
 .env.*
 !.env.example
 *.local
 *.log
+.firebase/
+firebase-debug.log*
+apps/functions/.env
+apps/functions/.env.*
+!apps/functions/.env.example
 .DS_Store
 
 # Local data and transient Codex output
