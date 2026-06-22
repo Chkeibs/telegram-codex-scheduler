@@ -1,10 +1,56 @@
 # Telegram Codex Scheduler — Google Cloud wake-to-run
 
 > Private, self-hosted Telegram scheduler for the locally authenticated Codex CLI.
-> The cloud implementation lives on `codex/google-cloud-wake-worker`; `main` and the
-> `local-sqlite-v1` tag retain the earlier always-on SQLite edition as a rollback.
+> The production Google Cloud implementation lives on `main`; the
+> `local-sqlite-v1` tag retains the earlier always-on SQLite edition as a rollback.
 > Never put a Telegram token, Codex credential, Google refresh token, or service-account
 > key in this repository.
+
+## Main goal
+
+The main goal is to make Codex requests more efficient and dependable: prepare an
+instruction in Telegram now, choose when it should run, and let the private cloud
+worker execute it later without leaving your personal computer powered on.
+
+This repository is useful when you want to:
+
+- schedule a Codex task for later;
+- send a task immediately from Telegram;
+- wake a normally stopped Google Cloud VM only when work exists;
+- run Codex inside a specific server-side project clone;
+- receive the final result in the same private Telegram chat;
+- automatically shut the VM down after the queue is empty.
+
+The current implementation supports **Codex CLI only**. It does not currently run
+Claude or continue chats from the Codex desktop application. A future provider adapter
+could add Claude, but this README never assumes that unsupported feature exists.
+
+### Start here if you want to clone it
+
+```bash
+git clone https://github.com/Chkeibs/telegram-codex-scheduler.git
+cd telegram-codex-scheduler
+npm ci
+npm run typecheck
+npm run build
+npm test
+```
+
+Then read [Section 16](#16-deployment-sequence) from beginning to end before creating
+cloud resources. It covers account authentication, a brand-new dedicated project,
+cost controls, Firebase, the VM, Codex login, Telegram, testing, rollback, and teardown.
+
+Important mental model:
+
+```text
+Telegram project button -> operator-approved folder on the cloud VM
+Telegram message        -> a new non-interactive Codex task in that folder
+Telegram result         <- Codex final output
+```
+
+`Default project` is only a configured folder alias on the VM. It is not an existing
+Codex chat, a project on your Mac, or a GitHub repository unless you explicitly clone
+and map that repository on the VM.
 
 ## 0. Implementation status
 
@@ -48,14 +94,14 @@ authenticate Codex locally on their own VM, review current prices, and monitor b
 
 ## 1. Executive summary
 
-The target product is a private Telegram application that can accept an immediate
+The product is a private Telegram application that accepts an immediate
 or scheduled Codex request while its Compute Engine worker is powered off.
 
-The always-available control plane will run on Firebase/Google Cloud serverless
-services. It will receive Telegram webhooks, persist state in Firestore, schedule
-future wake-ups with Cloud Tasks, and start a stopped Compute Engine VM. The VM
-will run the locally authenticated Codex CLI, publish the sanitized result, and
-stop itself as soon as the queue is empty.
+The always-available control plane runs on Firebase/Google Cloud serverless
+services. It receives Telegram webhooks, persists state in Firestore, schedules
+future wake-ups with Cloud Tasks, and starts a stopped Compute Engine VM. The VM
+runs the locally authenticated Codex CLI, publishes the sanitized result, and
+stops itself as soon as the queue is empty.
 
 ```text
 Telegram
@@ -1621,12 +1667,11 @@ npx firebase login:list
 Authentication codes belong only in the Google/Firebase browser prompt. Never paste
 them into `.env`, Telegram, GitHub, an issue, or a commit.
 
-Clone and select the cloud branch:
+Clone the production `main` branch and validate it locally:
 
 ```bash
-git clone https://github.com/OWNER/telegram-codex-scheduler.git
+git clone https://github.com/Chkeibs/telegram-codex-scheduler.git
 cd telegram-codex-scheduler
-git switch codex/google-cloud-wake-worker
 npm ci
 npm run typecheck
 npm run build
@@ -1715,12 +1760,12 @@ On the VM, clone a disposable bootstrap copy, then run the installer as root wit
 your repository and release branch:
 
 ```bash
-git clone --branch codex/google-cloud-wake-worker --depth 1 \
-  https://github.com/OWNER/telegram-codex-scheduler.git \
+git clone --branch main --depth 1 \
+  https://github.com/Chkeibs/telegram-codex-scheduler.git \
   /tmp/telegram-codex-bootstrap
 sudo env \
-  REPOSITORY_URL=https://github.com/OWNER/telegram-codex-scheduler.git \
-  BRANCH=codex/google-cloud-wake-worker \
+  REPOSITORY_URL=https://github.com/Chkeibs/telegram-codex-scheduler.git \
+  BRANCH=main \
   bash /tmp/telegram-codex-bootstrap/infra/vm/install-worker.sh
 rm -rf /tmp/telegram-codex-bootstrap
 ```
