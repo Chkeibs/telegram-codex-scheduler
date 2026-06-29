@@ -1,19 +1,22 @@
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
-import type { FilesystemPermission } from "@telegram-codex/shared";
+import type { FilesystemPermission, JobKind } from "@telegram-codex/shared";
 
 export interface WorkerJob {
   id: string;
+  kind: JobKind;
   prompt: string;
   workdirKey: string;
   filesystemPermission: FilesystemPermission;
   telegramUserId: string;
   telegramChatId: string;
   scheduledAt: Date;
+  timezoneSnapshot: string;
   leaseOwner: string;
 }
 
 interface WorkerJobRecord {
   id: string;
+  kind: JobKind;
   status: string;
   prompt: string;
   workdirKey: string;
@@ -21,6 +24,7 @@ interface WorkerJobRecord {
   telegramUserId: string;
   telegramChatId: string;
   scheduledAt: Timestamp;
+  timezoneSnapshot: string;
   attempt: number;
   leaseOwner: string | null;
   leaseExpiresAt: Timestamp | null;
@@ -94,12 +98,14 @@ export class WorkerJobRepository {
       });
       return {
         id: document.id,
+        kind: record.kind,
         prompt: record.prompt,
         workdirKey: record.workdirKey,
         filesystemPermission: record.filesystemPermission,
         telegramUserId: record.telegramUserId,
         telegramChatId: record.telegramChatId,
         scheduledAt: record.scheduledAt.toDate(),
+        timezoneSnapshot: record.timezoneSnapshot,
         leaseOwner: workerId,
       };
     });

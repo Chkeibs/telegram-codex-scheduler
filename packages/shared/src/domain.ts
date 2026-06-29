@@ -1,5 +1,5 @@
 export type FilesystemPermission = "read_only" | "workspace_write";
-export type JobKind = "scheduled" | "immediate";
+export type JobKind = "scheduled" | "immediate" | "reset_credit_status";
 export type JobStatus =
   | "scheduled"
   | "pending_wake"
@@ -36,7 +36,7 @@ export interface CloudJob {
   workdirKey: string;
   workingDirectorySnapshot: string | null;
   filesystemPermission: FilesystemPermission;
-  codexMode: "exec";
+  codexMode: "exec" | "reset_credit_status";
   idempotencyKey: string;
   cloudTaskName: string | null;
   leaseOwner: string | null;

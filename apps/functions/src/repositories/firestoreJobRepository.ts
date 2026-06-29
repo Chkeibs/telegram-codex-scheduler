@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
-import type { JobStatus, NewCloudJob } from "@telegram-codex/shared";
+import type { JobKind, JobStatus, NewCloudJob } from "@telegram-codex/shared";
 import { assertJobTransition } from "@telegram-codex/shared";
 
 export interface StoredJob {
   id: string;
+  kind: JobKind;
   status: JobStatus;
   scheduledAt: Date;
   telegramUserId: string;
@@ -18,7 +19,7 @@ export interface StoredJob {
 
 interface JobRecord {
   id: string;
-  kind: "scheduled" | "immediate";
+  kind: JobKind;
   status: JobStatus;
   telegramUserId: string;
   telegramChatId: string;
@@ -28,7 +29,7 @@ interface JobRecord {
   workdirKey: string;
   workingDirectorySnapshot: string | null;
   filesystemPermission: "read_only" | "workspace_write";
-  codexMode: "exec";
+  codexMode: "exec" | "reset_credit_status";
   idempotencyKey: string;
   cloudTaskName: string | null;
   leaseOwner: string | null;
@@ -54,6 +55,7 @@ interface JobRecord {
 function summarize(record: JobRecord): StoredJob {
   return {
     id: record.id,
+    kind: record.kind,
     status: record.status,
     scheduledAt: record.scheduledAt.toDate(),
     telegramUserId: record.telegramUserId,
@@ -97,7 +99,7 @@ export class FirestoreJobRepository {
         workdirKey: input.workdirKey,
         workingDirectorySnapshot: null,
         filesystemPermission: input.filesystemPermission,
-        codexMode: "exec",
+        codexMode: input.kind === "reset_credit_status" ? "reset_credit_status" : "exec",
         idempotencyKey: input.idempotencyKey,
         cloudTaskName: null,
         leaseOwner: null,
@@ -123,7 +125,7 @@ export class FirestoreJobRepository {
       transaction.create(operationRef, {
         idempotencyKey: operationId,
         telegramUpdateId,
-        operationType: input.kind === "scheduled" ? "schedule_job" : "run_now",
+        operationType: input.kind === "scheduled" ? "schedule_job" : input.kind === "reset_credit_status" ? "reset_credit_status" : "run_now",
         resultingJobId: id,
         createdAt: timestamp,
         expiresAt: Timestamp.fromMillis(now.getTime() + 7 * 24 * 60 * 60 * 1000),
@@ -193,17 +195,18 @@ export class FirestoreJobRepository {
       .where("telegramUserId", "==", telegramUserId)
       .where("status", "in", ["scheduled", "pending_wake", "starting", "pending", "running"])
       .orderBy("scheduledAt", "asc")
-      .limit(limit + 1);
+      .limit(Math.max(limit + 1, 50));
     if (afterJobId) {
       const cursor = await this.firestore.collection("jobs").doc(afterJobId).get();
       if (!cursor.exists || cursor.get("telegramUserId") !== telegramUserId) return { jobs: [], nextCursor: null };
       query = query.startAfter(cursor);
     }
     const snapshot = await query.get();
-    const visible = snapshot.docs.slice(0, limit);
+    const filtered = snapshot.docs.filter((document) => (document.data() as JobRecord).kind !== "reset_credit_status");
+    const visible = filtered.slice(0, limit);
     return {
       jobs: visible.map((document) => summarize(document.data() as JobRecord)),
-      nextCursor: snapshot.size > limit ? visible.at(-1)?.id ?? null : null,
+      nextCursor: filtered.length > limit ? visible.at(-1)?.id ?? null : null,
     };
   }
 }

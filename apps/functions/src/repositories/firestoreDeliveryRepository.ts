@@ -1,7 +1,9 @@
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
+import type { JobKind } from "@telegram-codex/shared";
 
 export interface PendingDelivery {
   jobId: string;
+  kind: JobKind;
   telegramChatId: string;
   status: "completed" | "failed";
   outputPreview: string | null;
@@ -32,6 +34,7 @@ export class FirestoreDeliveryRepository {
       transaction.update(ref, { deliveryStatus: "sending", deliveryAttempt: attempt, deliveryStartedAt: Timestamp.fromDate(now), updatedAt: Timestamp.fromDate(now) });
       return {
         jobId,
+        kind: record.kind === "reset_credit_status" ? "reset_credit_status" : record.kind === "scheduled" ? "scheduled" : "immediate",
         telegramChatId: String(record.telegramChatId),
         status: record.status,
         outputPreview: typeof record.outputPreview === "string" ? record.outputPreview : null,

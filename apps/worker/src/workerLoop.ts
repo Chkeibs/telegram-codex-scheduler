@@ -2,6 +2,8 @@ import { preview, sanitizeOutput } from "./outputSanitizer.js";
 import type { CodexRequest, CodexResult } from "./codexRunner.js";
 import type { WorkerJob } from "./firestoreJobRepository.js";
 import type { ResultArtifactStoreLike } from "./resultArtifactStore.js";
+import type { CodexResetCreditsSnapshot } from "@telegram-codex/shared";
+import { formatResetCreditsForTelegram } from "@telegram-codex/shared";
 
 export interface WorkerJobsLike {
   setWorkerState(instanceName: string, state: string, bootId: string, currentJobId: string | null): Promise<void>;
@@ -15,6 +17,7 @@ export interface WorkerJobsLike {
 }
 
 export interface CodexExecutorLike { run(request: CodexRequest): Promise<CodexResult> }
+export interface ResetCreditsReaderLike { read(): Promise<CodexResetCreditsSnapshot> }
 export interface ShutdownLike { drain(hasClaimableWork: () => Promise<boolean>): Promise<"continued" | "shutdown"> }
 
 export interface WorkerLoopOptions {
@@ -35,6 +38,7 @@ export class WorkerLoop {
     private readonly artifacts: ResultArtifactStoreLike,
     private readonly shutdown: ShutdownLike,
     private readonly options: WorkerLoopOptions,
+    private readonly resetCreditsReader?: ResetCreditsReaderLike,
   ) {}
 
   async run(): Promise<void> {
@@ -67,17 +71,25 @@ export class WorkerLoop {
       }, this.options.heartbeatMs);
       heartbeat.unref();
       try {
-        const result = await this.runner.run({ prompt: job.prompt, workdirKey: job.workdirKey, filesystemPermission: job.filesystemPermission });
-        const stdout = sanitizeOutput(result.stdout, this.options.secretValues);
-        const stderr = sanitizeOutput(result.stderr, this.options.secretValues);
-        const resultObjectName = await this.artifacts.put(job.id, result.success ? stdout : [stdout, stderr].filter(Boolean).join("\n\n--- diagnostics ---\n"));
-        if (result.success) {
-          const saved = await this.jobs.complete(job, preview(stdout, this.options.outputPreviewChars), resultObjectName, result.exitCode, result.durationMs, result.workingDirectory);
-          if (!saved) throw new Error("Job lease was lost before completion could be recorded");
+        if (job.kind === "reset_credit_status") {
+          if (!this.resetCreditsReader) throw new Error("Reset-credit reader is not configured on this worker");
+          const snapshot = await this.resetCreditsReader.read();
+          const output = formatResetCreditsForTelegram(snapshot, job.timezoneSnapshot);
+          const saved = await this.jobs.complete(job, output, null, 0, 0, "");
+          if (!saved) throw new Error("Job lease was lost before reset-credit status could be recorded");
         } else {
-          const code = result.timedOut ? "CODEX_TIMEOUT" : result.exitCode === null ? "CODEX_SPAWN_FAILED" : "CODEX_EXIT_ERROR";
-          const saved = await this.jobs.fail(job, code, preview(stderr, this.options.outputPreviewChars, true), stdout ? preview(stdout, this.options.outputPreviewChars) : null, resultObjectName, result.exitCode, result.durationMs, result.workingDirectory);
-          if (!saved) throw new Error("Job lease was lost before failure could be recorded");
+          const result = await this.runner.run({ prompt: job.prompt, workdirKey: job.workdirKey, filesystemPermission: job.filesystemPermission });
+          const stdout = sanitizeOutput(result.stdout, this.options.secretValues);
+          const stderr = sanitizeOutput(result.stderr, this.options.secretValues);
+          const resultObjectName = await this.artifacts.put(job.id, result.success ? stdout : [stdout, stderr].filter(Boolean).join("\n\n--- diagnostics ---\n"));
+          if (result.success) {
+            const saved = await this.jobs.complete(job, preview(stdout, this.options.outputPreviewChars), resultObjectName, result.exitCode, result.durationMs, result.workingDirectory);
+            if (!saved) throw new Error("Job lease was lost before completion could be recorded");
+          } else {
+            const code = result.timedOut ? "CODEX_TIMEOUT" : result.exitCode === null ? "CODEX_SPAWN_FAILED" : "CODEX_EXIT_ERROR";
+            const saved = await this.jobs.fail(job, code, preview(stderr, this.options.outputPreviewChars, true), stdout ? preview(stdout, this.options.outputPreviewChars) : null, resultObjectName, result.exitCode, result.durationMs, result.workingDirectory);
+            if (!saved) throw new Error("Job lease was lost before failure could be recorded");
+          }
         }
       } catch (error) {
         const message = sanitizeOutput(error instanceof Error ? error.message : String(error), this.options.secretValues);

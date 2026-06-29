@@ -758,7 +758,16 @@ DRAIN_GRACE_SECONDS=60
 WORKER_MAX_BOOT_SECONDS=3600
 WORKDIR_CONFIG_PATH=/etc/telegram-codex-scheduler/workdirs.json
 WORKER_DISABLE_SHUTDOWN=false
+CODEX_RESET_CREDIT_DETAILS_MODE=private_endpoint_details
+CODEX_RESET_CREDITS_ENDPOINT=https://chatgpt.com/backend-api/wham/rate-limit-reset-credits
+CODEX_RESET_CREDITS_TIMEOUT_SECONDS=20
 ```
+
+The reset-credit variables power the optional Telegram **Codex reset credits**
+button. The worker reads the already-authenticated local Codex auth file at
+runtime, asks ChatGPT for available manual reset credits, and stores only the
+short Telegram answer containing the count and expiry dates. The Firebase
+Function never receives Codex tokens.
 
 `workdirs.json` example:
 
@@ -965,8 +974,8 @@ Preserve the existing button experience while removing long polling.
 2. Adapt Telegraf to the Firebase HTTPS request/response lifecycle.
 3. Add webhook secret validation before Telegraf middleware.
 4. Add allowlist middleware before every handler.
-5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/jobs`, `/cancel`,
-   `/settings`, and `/help`.
+5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/reset_credits`, `/jobs`,
+   `/cancel`, `/settings`, and `/help`.
 6. Port the reply keyboard and inline callback keyboards.
 7. Replace in-process/SQLite draft access with Firestore repositories.
 8. Add deterministic callback payload parsing and length validation.
@@ -1858,8 +1867,10 @@ The output must be `TERMINATED`. In Telegram:
 5. confirm;
 6. observe the queue notification, then the exact Codex result;
 7. wait through the drain grace and verify the VM returns to `TERMINATED`;
-8. schedule another read-only job several minutes ahead and verify the same full cycle;
-9. create then cancel a future job and verify the VM never starts for it.
+8. click **Codex reset credits** and verify Telegram sends exactly one result
+   message with the reset count and expiry dates;
+9. schedule another read-only job several minutes ahead and verify the same full cycle;
+10. create then cancel a future job and verify the VM never starts for it.
 
 Do not press confirmation twice to “help” a slow boot. Confirmation is idempotent,
 but cold boot plus Codex can legitimately take several minutes.
@@ -1953,6 +1964,7 @@ used if unrelated resources were placed in the project.
 - [x] Read-only is default.
 - [x] Workspace-write requires warning and confirmation.
 - [x] Result reaches Telegram.
+- [x] Codex reset credits button returns only the count and expiry dates.
 - [x] VM stops after queue drain.
 
 ### Reliability

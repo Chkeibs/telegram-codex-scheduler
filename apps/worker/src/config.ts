@@ -17,6 +17,9 @@ const environmentSchema = z.object({
   WORKER_MAX_BOOT_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   WORKDIR_CONFIG_PATH: z.string().trim().min(1),
   WORKER_DISABLE_SHUTDOWN: z.enum(["true", "false"]).default("false"),
+  CODEX_RESET_CREDIT_DETAILS_MODE: z.enum(["disabled", "private_endpoint_details"]).default("private_endpoint_details"),
+  CODEX_RESET_CREDITS_ENDPOINT: z.string().url().default("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"),
+  CODEX_RESET_CREDITS_TIMEOUT_SECONDS: z.coerce.number().int().min(3).max(120).default(20),
 });
 
 const workdirSchema = z.record(z.string().regex(/^[a-zA-Z0-9_-]+$/), z.string().min(1));
@@ -36,6 +39,9 @@ export interface WorkerConfig {
   maximumBootMs: number;
   workdirs: Readonly<Record<string, string>>;
   shutdownDisabled: boolean;
+  resetCreditDetailsMode: "disabled" | "private_endpoint_details";
+  resetCreditsEndpoint: string;
+  resetCreditsTimeoutMs: number;
 }
 
 export function loadWorkerConfig(environment: NodeJS.ProcessEnv = process.env): WorkerConfig {
@@ -61,5 +67,8 @@ export function loadWorkerConfig(environment: NodeJS.ProcessEnv = process.env): 
     maximumBootMs: value.WORKER_MAX_BOOT_SECONDS * 1000,
     workdirs,
     shutdownDisabled: value.WORKER_DISABLE_SHUTDOWN === "true",
+    resetCreditDetailsMode: value.CODEX_RESET_CREDIT_DETAILS_MODE,
+    resetCreditsEndpoint: value.CODEX_RESET_CREDITS_ENDPOINT,
+    resetCreditsTimeoutMs: value.CODEX_RESET_CREDITS_TIMEOUT_SECONDS * 1000,
   };
 }
