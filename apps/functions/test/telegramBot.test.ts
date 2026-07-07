@@ -127,27 +127,26 @@ describe("cloud Telegram button flow", () => {
     expect(fixture.value.conversations.start).not.toHaveBeenCalled();
   });
 
-  it("runs preset time -> message -> directory -> permission -> confirmation", async () => {
+  it("runs preset time -> directory -> permission -> confirmation with the fixed hi prompt", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
-    await bot.handleUpdate(messageUpdate(1, "Send scheduled message"));
+    await bot.handleUpdate(messageUpdate(1, "Schedule say \"hi\""));
     await bot.handleUpdate(callbackUpdate(2, "schedule:time:10m"));
-    await bot.handleUpdate(messageUpdate(3, "inspect the repository"));
     await bot.handleUpdate(callbackUpdate(4, "draft:dir:default"));
     await bot.handleUpdate(callbackUpdate(5, "draft:permission:read_only"));
     await bot.handleUpdate(callbackUpdate(6, "draft:confirm"));
-    expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledOnce();
+    expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'say "hi"', kind: "scheduled" }), 6);
     expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
   });
 
-  it("queues an immediate job through the private wake task", async () => {
+  it("queues an immediate fixed hi job through the private wake task", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
-    await bot.handleUpdate(messageUpdate(10, "Send message now"));
-    await bot.handleUpdate(messageUpdate(11, "hello"));
+    await bot.handleUpdate(messageUpdate(10, "Send say \"hi\" now"));
     await bot.handleUpdate(callbackUpdate(12, "draft:dir:default"));
     await bot.handleUpdate(callbackUpdate(13, "draft:permission:read_only"));
     await bot.handleUpdate(callbackUpdate(14, "draft:confirm"));
+    expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'say "hi"', kind: "immediate" }), 14);
     expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
     expect(fixture.value.jobs.markStarting).not.toHaveBeenCalled();
   });
@@ -169,8 +168,7 @@ describe("cloud Telegram button flow", () => {
   it("requires explicit acknowledgement before workspace-write confirmation", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
-    await bot.handleUpdate(messageUpdate(20, "Send message now"));
-    await bot.handleUpdate(messageUpdate(21, "edit files"));
+    await bot.handleUpdate(messageUpdate(20, "Send say \"hi\" now"));
     await bot.handleUpdate(callbackUpdate(22, "draft:dir:default"));
     await bot.handleUpdate(callbackUpdate(23, "draft:permission:workspace_write"));
     await bot.handleUpdate(callbackUpdate(24, "draft:confirm"));

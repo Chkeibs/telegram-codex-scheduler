@@ -1860,17 +1860,16 @@ gcloud compute instances describe "$INSTANCE_NAME" \
 
 The output must be `TERMINATED`. In Telegram:
 
-1. choose **Send message now**;
-2. enter `CLOUD_E2E_OK`;
-3. choose the default project;
-4. choose **Read-only**;
-5. confirm;
-6. observe the queue notification, then the exact Codex result;
-7. wait through the drain grace and verify the VM returns to `TERMINATED`;
-8. click **Codex reset credits** and verify Telegram sends exactly one result
+1. choose **Send say "hi" now**;
+2. choose the default project;
+3. choose **Read-only**;
+4. confirm;
+5. observe the queue notification, then the exact Codex result;
+6. wait through the drain grace and verify the VM returns to `TERMINATED`;
+7. click **Codex reset credits** and verify Telegram sends exactly one result
    message with the reset count and expiry dates;
-9. schedule another read-only job several minutes ahead and verify the same full cycle;
-10. create then cancel a future job and verify the VM never starts for it.
+8. use **Schedule say "hi"** several minutes ahead and verify the same full cycle;
+9. create then cancel a future job and verify the VM never starts for it.
 
 Do not press confirmation twice to “help” a slow boot. Confirmation is idempotent,
 but cold boot plus Codex can legitimately take several minutes.

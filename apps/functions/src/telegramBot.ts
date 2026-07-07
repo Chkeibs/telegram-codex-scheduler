@@ -8,14 +8,16 @@ import type { FirestoreUserRepository, CloudUserPreferences } from "./repositori
 import type { CloudTasksService } from "./services/cloudTasksService.js";
 
 const MENU = {
-  schedule: "Send scheduled message",
-  runNow: "Send message now",
+  schedule: "Schedule say \"hi\"",
+  runNow: "Send say \"hi\" now",
   resetCredits: "Codex reset credits",
   jobs: "My scheduled messages",
   cancel: "Cancel scheduled message",
   settings: "Settings",
   help: "Help",
 } as const;
+
+const QUICK_PROMPT = 'say "hi"';
 
 export interface CloudBotDependencies {
   config: FunctionsConfig;
@@ -118,8 +120,9 @@ async function beginSchedule(ctx: Context, dependencies: CloudBotDependencies): 
 
 async function beginRunNow(ctx: Context, dependencies: CloudBotDependencies): Promise<void> {
   const user = await ensureUser(ctx, dependencies);
-  await dependencies.conversations.start(user.telegramUserId, "run_now", "enter_message");
-  await ctx.reply("What message should I send to Codex now?");
+  await dependencies.conversations.start(user.telegramUserId, "run_now", "select_directory");
+  await dependencies.conversations.transition(user.telegramUserId, "select_directory", { prompt: QUICK_PROMPT });
+  await ctx.reply("Where should I run Codex?", directoryKeyboard(dependencies.config.workdirKeys, user.defaultWorkdirKey));
 }
 
 async function requestResetCredits(ctx: Context, dependencies: CloudBotDependencies): Promise<void> {
@@ -211,8 +214,8 @@ export function createCloudTelegramBot(dependencies: CloudBotDependencies): Tele
     }
     const user = await dependencies.users.get(draft.telegramUserId);
     const scheduledAt = presetTime(choice, user?.timezone ?? dependencies.config.defaultTimezone);
-    await dependencies.conversations.transition(draft.telegramUserId, "enter_message", { scheduledAt });
-    await ctx.reply("What message should I send to Codex?");
+    await dependencies.conversations.transition(draft.telegramUserId, "select_directory", { scheduledAt, prompt: QUICK_PROMPT });
+    await ctx.reply("Where should I run Codex?", directoryKeyboard(dependencies.config.workdirKeys, user?.defaultWorkdirKey ?? dependencies.config.defaultWorkdirKey));
   });
 
   bot.action(/^draft:dir:([a-zA-Z0-9_-]+)$/, async (ctx) => {
@@ -350,8 +353,8 @@ export function createCloudTelegramBot(dependencies: CloudBotDependencies): Tele
       const user = await dependencies.users.get(draft.telegramUserId);
       const parsed = parseDateInput(input, user?.timezone ?? dependencies.config.defaultTimezone);
       if (!parsed.ok) { await ctx.reply(parsed.reason); return; }
-      await dependencies.conversations.transition(draft.telegramUserId, "enter_message", { scheduledAt: parsed.date });
-      await ctx.reply("What message should I send to Codex?");
+      await dependencies.conversations.transition(draft.telegramUserId, "select_directory", { scheduledAt: parsed.date, prompt: QUICK_PROMPT });
+      await ctx.reply("Where should I run Codex?", directoryKeyboard(dependencies.config.workdirKeys, user?.defaultWorkdirKey ?? dependencies.config.defaultWorkdirKey));
       return;
     }
     if (draft.step === "enter_message") {
