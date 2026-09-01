@@ -16,6 +16,17 @@ especially useful for banked Codex resets: from your phone, you can see how many
 earned resets are available and when each one expires before using one to reset
 the eligible 5-hour and weekly limits.
 
+A primary use case is making the five-hour window work around your day instead
+of arranging your day around it. For example, schedule a tiny Codex task such as
+`say "hi"` for early morning, before you wake up. The cloud VM starts by itself,
+runs the message, sends the result to Telegram, and powers off. You do not need
+to wake up just to send the first message, configure cron on your personal
+computer, or leave that computer running all night. When you later begin a
+focused one- or two-hour work session, the active five-hour window is already
+further along and can reset sooner than if your first message had been sent only
+when you started working. Exact quotas and reset behavior still depend on the
+current Codex plan shown in the app.
+
 This repository is useful when you want to:
 
 - schedule a Codex task for later;
