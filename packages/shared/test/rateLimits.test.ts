@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCodexRateLimitsForTelegram, parseCodexRateLimitsResponse } from "../src/rateLimits.js";
+import { formatBankedResetsForTelegram, formatCodexRateLimitsForTelegram, parseCodexRateLimitsResponse } from "../src/rateLimits.js";
 
 describe("Codex rate-limit parsing and formatting", () => {
   it("formats the 5-hour and weekly windows returned by App Server", () => {
@@ -38,5 +38,22 @@ describe("Codex rate-limit parsing and formatting", () => {
     });
     expect(snapshot.primary?.usedPercent).toBe(10);
     expect(snapshot.earnedResets).toBeNull();
+  });
+
+  it("formats only banked resets and their expiry dates", () => {
+    const snapshot = parseCodexRateLimitsResponse({
+      rateLimits: { primary: null, secondary: null },
+      rateLimitResetCredits: {
+        availableCount: 1,
+        credits: [{ status: "available", expiresAt: 1_789_866_600, title: "Rate-limit reset" }],
+      },
+    });
+    expect(formatBankedResetsForTelegram(snapshot, "Europe/Paris")).toBe([
+      "Codex banked resets",
+      "",
+      "Available: 1",
+      "",
+      "1. Expires: 20 Sep 2026, 03:10 (Europe/Paris)",
+    ].join("\n"));
   });
 });

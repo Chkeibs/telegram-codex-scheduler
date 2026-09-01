@@ -1,10 +1,10 @@
 # Archived design — private reset-credit expiry approach
 
-> Historical document, not the active implementation. The bot now reads the
-> normal 5-hour and weekly windows through the local Codex App Server method
-> `account/rateLimits/read`. The private endpoint approach below is preserved to
-> explain what the project tried before Codex exposed the reset timestamps in a
-> straightforward local interface. Its source remains in
+> Historical document, not the active implementation. The bot now reads banked
+> reset credits through the local Codex App Server method
+> `account/rateLimits/read`, specifically `rateLimitResetCredits`. The private
+> endpoint approach below is preserved to explain what the project tried before
+> Codex exposed those details in a straightforward local interface. Its source remains in
 > `apps/worker/src/codexResetCreditsReader.ts`, but the worker does not instantiate
 > it and the related environment variables were removed.
 
@@ -15,11 +15,10 @@ endpoint `/backend-api/wham/rate-limit-reset-credits`. It could inspect manual
 reset-credit expiry records, but it depended on private authentication and a
 payload that could change without notice. The current implementation is simpler:
 it launches `codex app-server --stdio`, initializes the local RPC session, calls
-`account/rateLimits/read`, and displays the primary (normally 5-hour) and
-secondary (normally weekly) reset timestamps. Recent App Server versions can
-also include earned reset-credit details in that same response, so the bot shows
-their count and expiry times when available. No raw credential handling or
-private HTTP request is part of the active path.
+`account/rateLimits/read`, and displays only the authoritative banked-reset count
+and returned expiry dates. The normal 5-hour and weekly usage windows are not
+part of the Telegram response. No raw credential handling or private HTTP request
+is part of the active path.
 
 The remaining sections are the original plan and are intentionally left intact
 as engineering history.

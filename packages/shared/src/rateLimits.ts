@@ -81,6 +81,22 @@ export function formatCodexRateLimitsForTelegram(snapshot: CodexRateLimitsSnapsh
   return lines.join("\n");
 }
 
+export function formatBankedResetsForTelegram(snapshot: CodexRateLimitsSnapshot, timezone: string): string {
+  const banked = snapshot.earnedResets;
+  if (!banked) return "Codex banked resets\n\nAvailable: unknown\n\nCodex did not return banked-reset data.";
+
+  const lines = ["Codex banked resets", "", `Available: ${banked.availableCount}`];
+  const availableCredits = banked.credits.filter((credit) => credit.status === "available");
+  if (availableCredits.length > 0) {
+    availableCredits.forEach((credit, index) => {
+      lines.push("", `${index + 1}. Expires: ${formatResetTime(credit.expiresAt, timezone)}`);
+    });
+  } else if (banked.availableCount > 0) {
+    lines.push("", "Expiry details were not returned by this Codex version.");
+  }
+  return lines.join("\n");
+}
+
 function windowLabel(durationMins: number | null): string {
   if (durationMins === 300) return "5-hour limit";
   if (durationMins === 10_080) return "Weekly limit";

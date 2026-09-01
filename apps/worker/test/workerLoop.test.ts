@@ -68,7 +68,7 @@ describe("WorkerLoop", () => {
     expect(runner.run).toHaveBeenCalledOnce();
   });
 
-  it("answers Codex usage jobs without running Codex tasks or writing an artifact", async () => {
+  it("answers banked-reset jobs without running Codex tasks or writing an artifact", async () => {
     const resetJob: WorkerJob = { ...queuedJob, kind: "reset_credit_status", prompt: "" };
     const jobs = jobsWithOne(resetJob);
     const runner = { run: vi.fn() };
@@ -76,7 +76,10 @@ describe("WorkerLoop", () => {
       read: vi.fn(async () => ({
         primary: { usedPercent: 43, windowDurationMins: 300, resetsAt: 1_788_241_059 },
         secondary: { usedPercent: 29, windowDurationMins: 10_080, resetsAt: 1_788_747_939 },
-        earnedResets: null,
+        earnedResets: {
+          availableCount: 1,
+          credits: [{ status: "available", expiresAt: 1_789_866_600, title: "Rate-limit reset" }],
+        },
       })),
     };
     const artifactsForReset = { put: vi.fn(async () => "result-artifacts/job-1.txt") };
@@ -94,13 +97,11 @@ describe("WorkerLoop", () => {
     expect(runner.run).not.toHaveBeenCalled();
     expect(artifactsForReset.put).not.toHaveBeenCalled();
     expect(jobs.complete).toHaveBeenCalledWith(resetJob, [
-      "Codex usage & resets",
+      "Codex banked resets",
       "",
-      "5-hour limit: 43% used (57% left)",
-      "Resets: 01 Sep 2026, 08:37 (Asia/Beirut)",
+      "Available: 1",
       "",
-      "Weekly limit: 29% used (71% left)",
-      "Resets: 07 Sep 2026, 05:25 (Asia/Beirut)",
+      "1. Expires: 20 Sep 2026, 04:10 (Asia/Beirut)",
     ].join("\n"), null, 0, 0, "");
   });
 });

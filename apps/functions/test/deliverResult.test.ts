@@ -41,16 +41,16 @@ describe("result delivery", () => {
     expect(artifacts.delete).toHaveBeenCalledWith("result-artifacts/job.txt");
   });
 
-  it("sends Codex usage results as the only Telegram text without a Codex wrapper", async () => {
+  it("sends banked-reset results as the only Telegram text without a Codex wrapper", async () => {
     const repository = {
-      claim: vi.fn(async () => ({ jobId: "job", kind: "reset_credit_status" as const, telegramChatId: "1", status: "completed" as const, outputPreview: "Codex usage & resets\n\n5-hour limit: 43% used (57% left)\nResets: 01 Sep 2026, 01:37 (America/New_York)", errorPreview: null, resultObjectName: "ignored.txt", outputMode: "full" as const, maxOutputChars: 3500, attempt: 1 })),
+      claim: vi.fn(async () => ({ jobId: "job", kind: "reset_credit_status" as const, telegramChatId: "1", status: "completed" as const, outputPreview: "Codex banked resets\n\nAvailable: 1\n\n1. Expires: 20 Sep 2026, 03:10 (Europe/Paris)", errorPreview: null, resultObjectName: "ignored.txt", outputMode: "full" as const, maxOutputChars: 3500, attempt: 1 })),
       markSent: vi.fn(async () => undefined),
       releaseForRetry: vi.fn(async () => undefined),
     };
     const telegram = { sendMessage: vi.fn(async () => ({ message_id: 42 })), sendDocument: vi.fn(async () => ({ message_id: 43 })) };
     const artifacts = { read: vi.fn(async () => Buffer.from("full")), delete: vi.fn(async () => undefined) };
     await expect(createResultDelivery(repository as never, telegram, artifacts)("job")).resolves.toBe("sent");
-    expect(telegram.sendMessage).toHaveBeenCalledWith("1", "Codex usage & resets\n\n5-hour limit: 43% used (57% left)\nResets: 01 Sep 2026, 01:37 (America/New_York)");
+    expect(telegram.sendMessage).toHaveBeenCalledWith("1", "Codex banked resets\n\nAvailable: 1\n\n1. Expires: 20 Sep 2026, 03:10 (Europe/Paris)");
     expect(telegram.sendDocument).not.toHaveBeenCalled();
     expect(artifacts.read).not.toHaveBeenCalled();
   });
