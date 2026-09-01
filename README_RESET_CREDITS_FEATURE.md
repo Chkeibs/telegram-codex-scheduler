@@ -1,4 +1,30 @@
-# Plan — Codex reset credits expiry feature
+# Archived design — private reset-credit expiry approach
+
+> Historical document, not the active implementation. The bot now reads the
+> normal 5-hour and weekly windows through the local Codex App Server method
+> `account/rateLimits/read`. The private endpoint approach below is preserved to
+> explain what the project tried before Codex exposed the reset timestamps in a
+> straightforward local interface. Its source remains in
+> `apps/worker/src/codexResetCreditsReader.ts`, but the worker does not instantiate
+> it and the related environment variables were removed.
+
+## Why this was replaced
+
+The old design read `~/.codex/auth.json` and called the undocumented ChatGPT
+endpoint `/backend-api/wham/rate-limit-reset-credits`. It could inspect manual
+reset-credit expiry records, but it depended on private authentication and a
+payload that could change without notice. The current implementation is simpler:
+it launches `codex app-server --stdio`, initializes the local RPC session, calls
+`account/rateLimits/read`, and displays the primary (normally 5-hour) and
+secondary (normally weekly) reset timestamps. Recent App Server versions can
+also include earned reset-credit details in that same response, so the bot shows
+their count and expiry times when available. No raw credential handling or
+private HTTP request is part of the active path.
+
+The remaining sections are the original plan and are intentionally left intact
+as engineering history.
+
+# Original plan — Codex reset credits expiry feature
 
 This document is a dedicated implementation plan for adding a Telegram bot feature that shows the user's available Codex rate-limit reset credits and their expiration dates.
 

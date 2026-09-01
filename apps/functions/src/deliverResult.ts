@@ -11,11 +11,11 @@ export function createResultDelivery(repository: FirestoreDeliveryRepository, te
     const delivery = await repository.claim(jobId);
     if (!delivery) return "skipped";
     const text = delivery.kind === "reset_credit_status" && delivery.status === "completed"
-      ? (delivery.outputPreview ?? "Codex resets: 0")
+      ? (delivery.outputPreview ?? "Codex usage & resets\n\nNo usage data returned.")
       : (delivery.status === "completed"
       ? `✅ Codex task completed.\n\nOutput:\n${delivery.outputPreview ?? "(No output returned.)"}`
       : delivery.kind === "reset_credit_status"
-        ? `Codex resets: unavailable`
+        ? `Codex usage & resets: unavailable`
         : `❌ Codex task failed.\n\nError:\n${delivery.errorPreview ?? "Unknown error. Check protected logs."}`);
     const boundedText = text.slice(0, delivery.maxOutputChars);
     try {

@@ -9,7 +9,7 @@ import { WorkdirPolicy } from "./pathPolicy.js";
 import { ShutdownCoordinator, systemShutdown } from "./shutdownCoordinator.js";
 import { WorkerLoop } from "./workerLoop.js";
 import { CloudStorageResultArtifactStore } from "./resultArtifactStore.js";
-import { CodexResetCreditsReader } from "./codexResetCreditsReader.js";
+import { CodexRateLimitsReader } from "./codexRateLimitsReader.js";
 
 async function main(): Promise<void> {
   const config = loadWorkerConfig();
@@ -17,10 +17,9 @@ async function main(): Promise<void> {
   const jobs = new WorkerJobRepository(getFirestore());
   const paths = new WorkdirPolicy(config.workdirs);
   const runner = new CodexRunner(config.codexBin, paths, config.codexTimeoutMs, config.maxCodexOutputBytes);
-  const resetCreditsReader = new CodexResetCreditsReader({
-    mode: config.resetCreditDetailsMode,
-    endpoint: config.resetCreditsEndpoint,
-    timeoutMs: config.resetCreditsTimeoutMs,
+  const rateLimitsReader = new CodexRateLimitsReader({
+    codexBin: config.codexBin,
+    timeoutMs: config.usageTimeoutMs,
   });
   const shutdown = new ShutdownCoordinator(config.drainGraceMs, config.shutdownDisabled ? async () => undefined : systemShutdown);
   const bootId = randomUUID();
@@ -32,7 +31,7 @@ async function main(): Promise<void> {
     heartbeatMs: config.heartbeatMs,
     maximumRuntimeMs: config.maximumBootMs,
     outputPreviewChars: 3500,
-  }, resetCreditsReader);
+  }, rateLimitsReader);
   await worker.run();
 }
 

@@ -68,14 +68,15 @@ describe("WorkerLoop", () => {
     expect(runner.run).toHaveBeenCalledOnce();
   });
 
-  it("answers reset-credit jobs without running Codex or writing an artifact", async () => {
+  it("answers Codex usage jobs without running Codex tasks or writing an artifact", async () => {
     const resetJob: WorkerJob = { ...queuedJob, kind: "reset_credit_status", prompt: "" };
     const jobs = jobsWithOne(resetJob);
     const runner = { run: vi.fn() };
-    const resetCredits = {
+    const rateLimits = {
       read: vi.fn(async () => ({
-        availableCount: 1,
-        availableCredits: [{ status: "available", expiresAt: "2026-07-18T00:13:00.000Z" }],
+        primary: { usedPercent: 43, windowDurationMins: 300, resetsAt: 1_788_241_059 },
+        secondary: { usedPercent: 29, windowDurationMins: 10_080, resetsAt: 1_788_747_939 },
+        earnedResets: null,
       })),
     };
     const artifactsForReset = { put: vi.fn(async () => "result-artifacts/job-1.txt") };
@@ -87,11 +88,19 @@ describe("WorkerLoop", () => {
       heartbeatMs: 100,
       maximumRuntimeMs: 10000,
       outputPreviewChars: 3500,
-    }, resetCredits);
+    }, rateLimits);
     await loop.run();
-    expect(resetCredits.read).toHaveBeenCalledOnce();
+    expect(rateLimits.read).toHaveBeenCalledOnce();
     expect(runner.run).not.toHaveBeenCalled();
     expect(artifactsForReset.put).not.toHaveBeenCalled();
-    expect(jobs.complete).toHaveBeenCalledWith(resetJob, "Codex resets: 1\n\n1. Expires: 18 Jul 2026, 03:13", null, 0, 0, "");
+    expect(jobs.complete).toHaveBeenCalledWith(resetJob, [
+      "Codex usage & resets",
+      "",
+      "5-hour limit: 43% used (57% left)",
+      "Resets: 01 Sep 2026, 08:37 (Asia/Beirut)",
+      "",
+      "Weekly limit: 29% used (71% left)",
+      "Resets: 07 Sep 2026, 05:25 (Asia/Beirut)",
+    ].join("\n"), null, 0, 0, "");
   });
 });

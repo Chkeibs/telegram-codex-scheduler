@@ -10,7 +10,7 @@ import type { CloudTasksService } from "./services/cloudTasksService.js";
 const MENU = {
   schedule: "Schedule say \"hi\"",
   runNow: "Send say \"hi\" now",
-  resetCredits: "Codex reset credits",
+  usage: "Codex usage & resets",
   jobs: "My scheduled messages",
   cancel: "Cancel scheduled message",
   settings: "Settings",
@@ -30,7 +30,7 @@ export interface CloudBotDependencies {
 function mainKeyboard() {
   return Markup.keyboard([
     [MENU.schedule, MENU.runNow],
-    [MENU.resetCredits],
+    [MENU.usage],
     [MENU.jobs, MENU.cancel],
     [MENU.settings, MENU.help],
   ]).resize();
@@ -125,7 +125,7 @@ async function beginRunNow(ctx: Context, dependencies: CloudBotDependencies): Pr
   await ctx.reply("Where should I run Codex?", directoryKeyboard(dependencies.config.workdirKeys, user.defaultWorkdirKey));
 }
 
-async function requestResetCredits(ctx: Context, dependencies: CloudBotDependencies): Promise<void> {
+async function requestCodexUsage(ctx: Context, dependencies: CloudBotDependencies): Promise<void> {
   const user = await ensureUser(ctx, dependencies);
   const id = randomUUID();
   const result = await dependencies.jobs.createIdempotent({
@@ -138,7 +138,7 @@ async function requestResetCredits(ctx: Context, dependencies: CloudBotDependenc
     timezoneSnapshot: user.timezone,
     workdirKey: user.defaultWorkdirKey,
     filesystemPermission: "read_only",
-    idempotencyKey: `telegram-reset-credits-${ctx.update.update_id}`,
+    idempotencyKey: `telegram-codex-usage-${ctx.update.update_id}`,
   }, ctx.update.update_id);
   if (result.created) await dependencies.tasks.scheduleWake(result.job.id, new Date());
 }
@@ -182,8 +182,9 @@ export function createCloudTelegramBot(dependencies: CloudBotDependencies): Tele
   bot.hears(MENU.schedule, (ctx) => beginSchedule(ctx, dependencies));
   bot.command("run_now", (ctx) => beginRunNow(ctx, dependencies));
   bot.hears(MENU.runNow, (ctx) => beginRunNow(ctx, dependencies));
-  bot.command("reset_credits", (ctx) => requestResetCredits(ctx, dependencies));
-  bot.hears(MENU.resetCredits, (ctx) => requestResetCredits(ctx, dependencies));
+  bot.command("usage", (ctx) => requestCodexUsage(ctx, dependencies));
+  bot.command("reset_credits", (ctx) => requestCodexUsage(ctx, dependencies));
+  bot.hears(MENU.usage, (ctx) => requestCodexUsage(ctx, dependencies));
   bot.command("jobs", (ctx) => showJobs(ctx, dependencies));
   bot.hears(MENU.jobs, (ctx) => showJobs(ctx, dependencies));
   bot.action(/^jobs:page:([0-9a-f-]{36})$/, async (ctx) => { await ctx.answerCbQuery(); await showJobs(ctx, dependencies, false, ctx.match[1]); });

@@ -3,6 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { parseResetCreditsResponse, type CodexResetCreditsSnapshot } from "@telegram-codex/shared";
 
+/**
+ * Historical implementation kept for reference only.
+ *
+ * The active worker uses CodexRateLimitsReader and the supported local App Server
+ * RPC. This reader called an undocumented ChatGPT endpoint and must not be wired
+ * back into production without an explicit architecture decision.
+ */
+
 interface AuthFile {
   tokens?: {
     access_token?: string;

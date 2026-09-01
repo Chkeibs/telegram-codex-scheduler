@@ -2,8 +2,8 @@ import { preview, sanitizeOutput } from "./outputSanitizer.js";
 import type { CodexRequest, CodexResult } from "./codexRunner.js";
 import type { WorkerJob } from "./firestoreJobRepository.js";
 import type { ResultArtifactStoreLike } from "./resultArtifactStore.js";
-import type { CodexResetCreditsSnapshot } from "@telegram-codex/shared";
-import { formatResetCreditsForTelegram } from "@telegram-codex/shared";
+import type { CodexRateLimitsSnapshot } from "@telegram-codex/shared";
+import { formatCodexRateLimitsForTelegram } from "@telegram-codex/shared";
 
 export interface WorkerJobsLike {
   setWorkerState(instanceName: string, state: string, bootId: string, currentJobId: string | null): Promise<void>;
@@ -17,7 +17,7 @@ export interface WorkerJobsLike {
 }
 
 export interface CodexExecutorLike { run(request: CodexRequest): Promise<CodexResult> }
-export interface ResetCreditsReaderLike { read(): Promise<CodexResetCreditsSnapshot> }
+export interface RateLimitsReaderLike { read(): Promise<CodexRateLimitsSnapshot> }
 export interface ShutdownLike { drain(hasClaimableWork: () => Promise<boolean>): Promise<"continued" | "shutdown"> }
 
 export interface WorkerLoopOptions {
@@ -38,7 +38,7 @@ export class WorkerLoop {
     private readonly artifacts: ResultArtifactStoreLike,
     private readonly shutdown: ShutdownLike,
     private readonly options: WorkerLoopOptions,
-    private readonly resetCreditsReader?: ResetCreditsReaderLike,
+    private readonly rateLimitsReader?: RateLimitsReaderLike,
   ) {}
 
   async run(): Promise<void> {
@@ -72,11 +72,11 @@ export class WorkerLoop {
       heartbeat.unref();
       try {
         if (job.kind === "reset_credit_status") {
-          if (!this.resetCreditsReader) throw new Error("Reset-credit reader is not configured on this worker");
-          const snapshot = await this.resetCreditsReader.read();
-          const output = formatResetCreditsForTelegram(snapshot, job.timezoneSnapshot);
+          if (!this.rateLimitsReader) throw new Error("Codex rate-limit reader is not configured on this worker");
+          const snapshot = await this.rateLimitsReader.read();
+          const output = formatCodexRateLimitsForTelegram(snapshot, job.timezoneSnapshot);
           const saved = await this.jobs.complete(job, output, null, 0, 0, "");
-          if (!saved) throw new Error("Job lease was lost before reset-credit status could be recorded");
+          if (!saved) throw new Error("Job lease was lost before Codex usage status could be recorded");
         } else {
           const result = await this.runner.run({ prompt: job.prompt, workdirKey: job.workdirKey, filesystemPermission: job.filesystemPermission });
           const stdout = sanitizeOutput(result.stdout, this.options.secretValues);

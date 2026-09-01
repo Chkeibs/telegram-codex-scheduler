@@ -8,9 +8,13 @@
 
 ## Main goal
 
-The main goal is to make Codex requests more efficient and dependable: prepare an
-instruction in Telegram now, choose when it should run, and let the private cloud
-worker execute it later without leaving your personal computer powered on.
+The primary goal is to let you send a Codex instruction whenever you want from
+your phone, without keeping your personal computer powered on 24/7. Telegram is
+the remote control; a normally stopped cloud VM wakes only for the requested job,
+runs Codex, returns the result to the phone, and shuts down again. This is
+especially useful for making efficient use of Codex's 5-hour and weekly usage
+windows: you can see when each window resets and queue work around those times
+even when you are away from your computer.
 
 This repository is useful when you want to:
 
@@ -19,6 +23,7 @@ This repository is useful when you want to:
 - wake a normally stopped Google Cloud VM only when work exists;
 - run Codex inside a specific server-side project clone;
 - receive the final result in the same private Telegram chat;
+- check the current 5-hour and weekly Codex usage/reset times from Telegram;
 - automatically shut the VM down after the queue is empty.
 
 The current implementation supports **Codex CLI only**. It does not currently run
@@ -76,7 +81,7 @@ Verified local gates on Node.js 24:
 
 - strict TypeScript typecheck;
 - production build of the local app, shared package, Functions, and worker;
-- 58 unit/integration tests;
+- 68 unit/integration tests;
 - 5 Firestore Emulator transaction tests;
 - real subprocess success, failure, output-bound, injection, and timeout tests;
 - cold-VM real Codex execution and result delivery;
@@ -758,16 +763,46 @@ DRAIN_GRACE_SECONDS=60
 WORKER_MAX_BOOT_SECONDS=3600
 WORKDIR_CONFIG_PATH=/etc/telegram-codex-scheduler/workdirs.json
 WORKER_DISABLE_SHUTDOWN=false
-CODEX_RESET_CREDIT_DETAILS_MODE=private_endpoint_details
-CODEX_RESET_CREDITS_ENDPOINT=https://chatgpt.com/backend-api/wham/rate-limit-reset-credits
-CODEX_RESET_CREDITS_TIMEOUT_SECONDS=20
+CODEX_USAGE_TIMEOUT_SECONDS=20
 ```
 
-The reset-credit variables power the optional Telegram **Codex reset credits**
-button. The worker reads the already-authenticated local Codex auth file at
-runtime, asks ChatGPT for available manual reset credits, and stores only the
-short Telegram answer containing the count and expiry dates. The Firebase
-Function never receives Codex tokens.
+`CODEX_USAGE_TIMEOUT_SECONDS` bounds the **Codex usage & resets** check. The
+worker starts the locally installed `codex app-server` process over stdio and
+calls `account/rateLimits/read`. It formats the returned 5-hour and weekly usage
+percentages and reset timestamps in the user's timezone. When the installed
+Codex version also returns earned reset credits, their available count and expiry
+times are included too. No private ChatGPT URL, access token parsing, browser
+automation, or desktop-UI scraping is required.
+
+### 10.3 Reset detection: current and historical approaches
+
+The active implementation deliberately follows the same local App Server data
+path that Codex clients can use to render usage limits:
+
+```text
+Telegram button
+-> worker starts `codex app-server --stdio`
+-> `initialize`
+-> `account/rateLimits/read`
+-> primary window (normally 5 hours)
+-> secondary window (normally one week)
+-> optional earned-reset count and expiry rows
+-> sanitized Telegram message
+```
+
+Before these reset timestamps were readily exposed by Codex, this repository
+used a niche workaround: read the local Codex `auth.json`, extract its bearer
+token and account ID, then call the undocumented endpoint
+`/backend-api/wham/rate-limit-reset-credits` on `chatgpt.com`. That method was
+designed for manual reset-credit records and their expiry dates, not the normal
+5-hour/weekly windows. It was fragile because the endpoint and payload were
+private implementation details.
+
+The old code remains in `apps/worker/src/codexResetCreditsReader.ts` and
+`packages/shared/src/resetCredits.ts` as historical, tested reference code, but
+it is no longer constructed by the worker and has no production configuration.
+Do not re-enable it casually. The longer original design notes are preserved in
+`README_RESET_CREDITS_FEATURE.md`.
 
 `workdirs.json` example:
 
@@ -974,7 +1009,8 @@ Preserve the existing button experience while removing long polling.
 2. Adapt Telegraf to the Firebase HTTPS request/response lifecycle.
 3. Add webhook secret validation before Telegraf middleware.
 4. Add allowlist middleware before every handler.
-5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/reset_credits`, `/jobs`,
+5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/usage` (with the legacy
+   `/reset_credits` alias), `/jobs`,
    `/cancel`, `/settings`, and `/help`.
 6. Port the reply keyboard and inline callback keyboards.
 7. Replace in-process/SQLite draft access with Firestore repositories.
@@ -1866,8 +1902,8 @@ The output must be `TERMINATED`. In Telegram:
 4. confirm;
 5. observe the queue notification, then the exact Codex result;
 6. wait through the drain grace and verify the VM returns to `TERMINATED`;
-7. click **Codex reset credits** and verify Telegram sends exactly one result
-   message with the reset count and expiry dates;
+7. click **Codex usage & resets** and verify Telegram sends exactly one result
+   with the 5-hour and weekly usage percentages and reset times;
 8. use **Schedule say "hi"** several minutes ahead and verify the same full cycle;
 9. create then cancel a future job and verify the VM never starts for it.
 
@@ -1963,7 +1999,7 @@ used if unrelated resources were placed in the project.
 - [x] Read-only is default.
 - [x] Workspace-write requires warning and confirmation.
 - [x] Result reaches Telegram.
-- [x] Codex reset credits button returns only the count and expiry dates.
+- [x] Codex usage & resets button returns the 5-hour and weekly reset times.
 - [x] VM stops after queue drain.
 
 ### Reliability

@@ -151,10 +151,10 @@ describe("cloud Telegram button flow", () => {
     expect(fixture.value.jobs.markStarting).not.toHaveBeenCalled();
   });
 
-  it("queues reset-credit status from one menu button without sending an intermediate reply", async () => {
+  it("queues Codex usage status from one menu button without sending an intermediate reply", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
-    await bot.handleUpdate(messageUpdate(15, "Codex reset credits"));
+    await bot.handleUpdate(messageUpdate(15, "Codex usage & resets"));
     expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledWith(expect.objectContaining({
       kind: "reset_credit_status",
       prompt: "",
