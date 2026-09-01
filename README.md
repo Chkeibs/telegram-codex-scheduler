@@ -1670,6 +1670,13 @@ Before production acceptance, the following runbooks must exist and be exercised
 - Requests without the `X-Telegram-Bot-Api-Secret-Token` header must continue to get
   `403`; do not make the function accept anonymous unsigned updates.
 
+If a banked-reset job remains in `pending_wake` while the VM stays stopped, inspect
+the `taskHandler` logs for an authenticated-invocation `403`. Reapply
+`infra/gcloud/configure-function-access.sh` after any manual Firebase Functions
+deployment; it grants the dedicated Cloud Tasks identity `roles/run.invoker` only
+on the private task-handler service. The normal `deploy-functions.sh` workflow does
+this automatically.
+
 ### 15.10 Worker finishes but VM remains running
 
 - Inspect `telegram-codex-worker`, `telegram-codex-shutdown.path`, and

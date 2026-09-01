@@ -151,7 +151,7 @@ describe("cloud Telegram button flow", () => {
     expect(fixture.value.jobs.markStarting).not.toHaveBeenCalled();
   });
 
-  it("queues banked-reset status from one menu button without sending an intermediate reply", async () => {
+  it("queues banked-reset status from one menu button and confirms it immediately", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);
     await bot.handleUpdate(messageUpdate(15, "Codex banked resets"));
@@ -162,7 +162,10 @@ describe("cloud Telegram button flow", () => {
       workdirKey: "default",
     }), 15);
     expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
-    expect(fixture.calls).not.toHaveBeenCalledWith("sendMessage", expect.anything());
+    expect(fixture.calls).toHaveBeenCalledWith(
+      "sendMessage",
+      expect.objectContaining({ text: expect.stringContaining("Checking your Codex banked resets now") }),
+    );
   });
 
   it("requires explicit acknowledgement before workspace-write confirmation", async () => {

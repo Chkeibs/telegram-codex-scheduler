@@ -140,7 +140,12 @@ async function requestBankedResets(ctx: Context, dependencies: CloudBotDependenc
     filesystemPermission: "read_only",
     idempotencyKey: `telegram-banked-resets-${ctx.update.update_id}`,
   }, ctx.update.update_id);
-  if (result.created) await dependencies.tasks.scheduleWake(result.job.id, new Date());
+  if (!result.created) {
+    await ctx.reply("That banked-reset check was already queued. I will send the result here when it is ready.");
+    return;
+  }
+  await dependencies.tasks.scheduleWake(result.job.id, new Date());
+  await ctx.reply("Checking your Codex banked resets now. I will send the result here when it is ready.");
 }
 
 async function showJobs(ctx: Context, dependencies: CloudBotDependencies, cancellation = false, cursor?: string): Promise<void> {
