@@ -10,16 +10,17 @@ export function createResultDelivery(repository: FirestoreDeliveryRepository, te
   return async (jobId: string): Promise<"sent" | "skipped"> => {
     const delivery = await repository.claim(jobId);
     if (!delivery) return "skipped";
-    const text = delivery.kind === "reset_credit_status" && delivery.status === "completed"
-      ? (delivery.outputPreview ?? "Codex banked resets\n\nAvailable: unknown")
+    const isStatusCheck = delivery.kind === "reset_credit_status" || delivery.kind === "usage_status";
+    const text = isStatusCheck && delivery.status === "completed"
+      ? (delivery.outputPreview ?? (delivery.kind === "usage_status" ? "Codex usage limits\n\nUnavailable" : "Codex banked resets\n\nAvailable: unknown"))
       : (delivery.status === "completed"
       ? `✅ Codex task completed.\n\nOutput:\n${delivery.outputPreview ?? "(No output returned.)"}`
-      : delivery.kind === "reset_credit_status"
-        ? `Codex banked resets: unavailable`
+      : isStatusCheck
+        ? delivery.kind === "usage_status" ? "Codex usage limits: unavailable" : `Codex banked resets: unavailable`
         : `❌ Codex task failed.\n\nError:\n${delivery.errorPreview ?? "Unknown error. Check protected logs."}`);
     const boundedText = text.slice(0, delivery.maxOutputChars);
     try {
-      const message = delivery.kind !== "reset_credit_status" && delivery.outputMode === "full" && delivery.resultObjectName
+      const message = !isStatusCheck && delivery.outputMode === "full" && delivery.resultObjectName
         ? await telegram.sendDocument(delivery.telegramChatId, {
           source: await artifacts.read(delivery.resultObjectName),
           filename: `codex-result-${jobId.slice(0, 8)}.txt`,

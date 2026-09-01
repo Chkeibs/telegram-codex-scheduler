@@ -16,16 +16,13 @@ describe("Codex rate-limit parsing and formatting", () => {
     });
 
     expect(formatCodexRateLimitsForTelegram(snapshot, "America/New_York")).toBe([
-      "Codex usage & resets",
+      "Codex usage limits",
       "",
       "5-hour limit: 43% used (57% left)",
       "Resets: 01 Sep 2026, 01:37 (America/New_York)",
       "",
       "Weekly limit: 29% used (71% left)",
       "Resets: 06 Sep 2026, 22:25 (America/New_York)",
-      "",
-      "Earned resets available: 1",
-      "Reset 1 expires: 07 Sep 2026, 17:32 (America/New_York)",
     ].join("\n"));
   });
 

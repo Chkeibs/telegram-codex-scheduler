@@ -168,6 +168,23 @@ describe("cloud Telegram button flow", () => {
     );
   });
 
+  it("queues a separate 5-hour and weekly usage-limit check", async () => {
+    const fixture = dependencies();
+    const bot = prepareBot(fixture.value, fixture.calls);
+    await bot.handleUpdate(messageUpdate(16, "Codex usage limits"));
+    expect(fixture.value.jobs.createIdempotent).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "usage_status",
+      prompt: "",
+      filesystemPermission: "read_only",
+      workdirKey: "default",
+    }), 16);
+    expect(fixture.value.tasks.scheduleWake).toHaveBeenCalledOnce();
+    expect(fixture.calls).toHaveBeenCalledWith(
+      "sendMessage",
+      expect.objectContaining({ text: expect.stringContaining("5-hour and weekly limits") }),
+    );
+  });
+
   it("requires explicit acknowledgement before workspace-write confirmation", async () => {
     const fixture = dependencies();
     const bot = prepareBot(fixture.value, fixture.calls);

@@ -11,6 +11,7 @@ const MENU = {
   schedule: "Schedule say \"hi\"",
   runNow: "Send say \"hi\" now",
   bankedResets: "Codex banked resets",
+  usageLimits: "Codex usage limits",
   jobs: "My scheduled messages",
   cancel: "Cancel scheduled message",
   settings: "Settings",
@@ -30,7 +31,7 @@ export interface CloudBotDependencies {
 function mainKeyboard() {
   return Markup.keyboard([
     [MENU.schedule, MENU.runNow],
-    [MENU.bankedResets],
+    [MENU.bankedResets, MENU.usageLimits],
     [MENU.jobs, MENU.cancel],
     [MENU.settings, MENU.help],
   ]).resize();
@@ -148,6 +149,29 @@ async function requestBankedResets(ctx: Context, dependencies: CloudBotDependenc
   await ctx.reply("Checking your Codex banked resets now. I will send the result here when it is ready.");
 }
 
+async function requestUsageLimits(ctx: Context, dependencies: CloudBotDependencies): Promise<void> {
+  const user = await ensureUser(ctx, dependencies);
+  const id = randomUUID();
+  const result = await dependencies.jobs.createIdempotent({
+    id,
+    kind: "usage_status",
+    telegramUserId: user.telegramUserId,
+    telegramChatId: user.telegramChatId,
+    prompt: "",
+    scheduledAt: new Date(),
+    timezoneSnapshot: user.timezone,
+    workdirKey: user.defaultWorkdirKey,
+    filesystemPermission: "read_only",
+    idempotencyKey: `telegram-usage-limits-${ctx.update.update_id}`,
+  }, ctx.update.update_id);
+  if (!result.created) {
+    await ctx.reply("That usage-limit check was already queued. I will send the result here when it is ready.");
+    return;
+  }
+  await dependencies.tasks.scheduleWake(result.job.id, new Date());
+  await ctx.reply("Checking your Codex 5-hour and weekly limits now. I will send the result here when it is ready.");
+}
+
 async function showJobs(ctx: Context, dependencies: CloudBotDependencies, cancellation = false, cursor?: string): Promise<void> {
   const id = userId(ctx);
   const page = await dependencies.jobs.listPageForUser(id, 5, cursor);
@@ -188,9 +212,11 @@ export function createCloudTelegramBot(dependencies: CloudBotDependencies): Tele
   bot.command("run_now", (ctx) => beginRunNow(ctx, dependencies));
   bot.hears(MENU.runNow, (ctx) => beginRunNow(ctx, dependencies));
   bot.command("banked_resets", (ctx) => requestBankedResets(ctx, dependencies));
-  bot.command("usage", (ctx) => requestBankedResets(ctx, dependencies));
   bot.command("reset_credits", (ctx) => requestBankedResets(ctx, dependencies));
   bot.hears(MENU.bankedResets, (ctx) => requestBankedResets(ctx, dependencies));
+  bot.command("usage", (ctx) => requestUsageLimits(ctx, dependencies));
+  bot.command("usage_limits", (ctx) => requestUsageLimits(ctx, dependencies));
+  bot.hears(MENU.usageLimits, (ctx) => requestUsageLimits(ctx, dependencies));
   bot.command("jobs", (ctx) => showJobs(ctx, dependencies));
   bot.hears(MENU.jobs, (ctx) => showJobs(ctx, dependencies));
   bot.action(/^jobs:page:([0-9a-f-]{36})$/, async (ctx) => { await ctx.answerCbQuery(); await showJobs(ctx, dependencies, false, ctx.match[1]); });

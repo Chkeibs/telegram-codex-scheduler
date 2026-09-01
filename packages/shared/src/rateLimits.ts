@@ -64,7 +64,7 @@ export function parseCodexRateLimitsResponse(value: unknown): CodexRateLimitsSna
 export function formatCodexRateLimitsForTelegram(snapshot: CodexRateLimitsSnapshot, timezone: string): string {
   const windows = [snapshot.primary, snapshot.secondary].filter((window): window is CodexRateLimitWindow => window !== null);
   const lines = [
-    "Codex usage & resets",
+    "Codex usage limits",
     ...windows.flatMap((window) => [
       "",
       `${windowLabel(window.windowDurationMins)}: ${formatPercent(window.usedPercent)} used (${formatPercent(Math.max(0, 100 - window.usedPercent))} left)`,
@@ -72,12 +72,6 @@ export function formatCodexRateLimitsForTelegram(snapshot: CodexRateLimitsSnapsh
     ]),
   ];
   if (windows.length === 0) lines.push("", "No usage windows were returned by Codex.");
-  if (snapshot.earnedResets) {
-    lines.push("", `Earned resets available: ${snapshot.earnedResets.availableCount}`);
-    snapshot.earnedResets.credits
-      .filter((credit) => credit.status === "available")
-      .forEach((credit, index) => lines.push(`Reset ${index + 1} expires: ${formatResetTime(credit.expiresAt, timezone)}`));
-  }
   return lines.join("\n");
 }
 

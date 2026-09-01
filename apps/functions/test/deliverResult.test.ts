@@ -54,4 +54,18 @@ describe("result delivery", () => {
     expect(telegram.sendDocument).not.toHaveBeenCalled();
     expect(artifacts.read).not.toHaveBeenCalled();
   });
+
+  it("sends usage-limit results as plain Telegram text", async () => {
+    const output = "Codex usage limits\n\n5-hour limit: 10% used (90% left)\nResets: 01 Sep 2026, 21:21 (Europe/Paris)";
+    const repository = {
+      claim: vi.fn(async () => ({ jobId: "job", kind: "usage_status" as const, telegramChatId: "1", status: "completed" as const, outputPreview: output, errorPreview: null, resultObjectName: null, outputMode: "preview" as const, maxOutputChars: 3500, attempt: 1 })),
+      markSent: vi.fn(async () => undefined),
+      releaseForRetry: vi.fn(async () => undefined),
+    };
+    const telegram = { sendMessage: vi.fn(async () => ({ message_id: 42 })), sendDocument: vi.fn(async () => ({ message_id: 43 })) };
+    const artifacts = { read: vi.fn(async () => Buffer.from("full")), delete: vi.fn(async () => undefined) };
+    await expect(createResultDelivery(repository as never, telegram, artifacts)("job")).resolves.toBe("sent");
+    expect(telegram.sendMessage).toHaveBeenCalledWith("1", output);
+    expect(telegram.sendDocument).not.toHaveBeenCalled();
+  });
 });

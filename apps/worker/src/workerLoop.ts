@@ -3,7 +3,7 @@ import type { CodexRequest, CodexResult } from "./codexRunner.js";
 import type { WorkerJob } from "./firestoreJobRepository.js";
 import type { ResultArtifactStoreLike } from "./resultArtifactStore.js";
 import type { CodexRateLimitsSnapshot } from "@telegram-codex/shared";
-import { formatBankedResetsForTelegram } from "@telegram-codex/shared";
+import { formatBankedResetsForTelegram, formatCodexRateLimitsForTelegram } from "@telegram-codex/shared";
 
 export interface WorkerJobsLike {
   setWorkerState(instanceName: string, state: string, bootId: string, currentJobId: string | null): Promise<void>;
@@ -71,10 +71,12 @@ export class WorkerLoop {
       }, this.options.heartbeatMs);
       heartbeat.unref();
       try {
-        if (job.kind === "reset_credit_status") {
+        if (job.kind === "reset_credit_status" || job.kind === "usage_status") {
           if (!this.rateLimitsReader) throw new Error("Codex rate-limit reader is not configured on this worker");
           const snapshot = await this.rateLimitsReader.read();
-          const output = formatBankedResetsForTelegram(snapshot, job.timezoneSnapshot);
+          const output = job.kind === "reset_credit_status"
+            ? formatBankedResetsForTelegram(snapshot, job.timezoneSnapshot)
+            : formatCodexRateLimitsForTelegram(snapshot, job.timezoneSnapshot);
           const saved = await this.jobs.complete(job, output, null, 0, 0, "");
           if (!saved) throw new Error("Job lease was lost before Codex usage status could be recorded");
         } else {

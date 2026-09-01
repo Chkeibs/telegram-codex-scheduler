@@ -104,4 +104,32 @@ describe("WorkerLoop", () => {
       "1. Expires: 20 Sep 2026, 04:10 (Asia/Beirut)",
     ].join("\n"), null, 0, 0, "");
   });
+
+  it("answers usage-status jobs with only the 5-hour and weekly windows", async () => {
+    const usageJob: WorkerJob = { ...queuedJob, kind: "usage_status", prompt: "" };
+    const jobs = jobsWithOne(usageJob);
+    const runner = { run: vi.fn() };
+    const rateLimits = {
+      read: vi.fn(async () => ({
+        primary: { usedPercent: 43, windowDurationMins: 300, resetsAt: 1_788_241_059 },
+        secondary: { usedPercent: 29, windowDurationMins: 10_080, resetsAt: 1_788_747_939 },
+        earnedResets: { availableCount: 1, credits: [] },
+      })),
+    };
+    const loop = new WorkerLoop(jobs, runner, artifacts, { drain: vi.fn(async () => "shutdown" as const) }, {
+      workerId: "worker", bootId: "boot", instanceName: "vm", leaseMs: 1000,
+      heartbeatMs: 100, maximumRuntimeMs: 10000, outputPreviewChars: 3500,
+    }, rateLimits);
+    await loop.run();
+    expect(jobs.complete).toHaveBeenCalledWith(usageJob, [
+      "Codex usage limits",
+      "",
+      "5-hour limit: 43% used (57% left)",
+      "Resets: 01 Sep 2026, 08:37 (Asia/Beirut)",
+      "",
+      "Weekly limit: 29% used (71% left)",
+      "Resets: 07 Sep 2026, 05:25 (Asia/Beirut)",
+    ].join("\n"), null, 0, 0, "");
+    expect(runner.run).not.toHaveBeenCalled();
+  });
 });

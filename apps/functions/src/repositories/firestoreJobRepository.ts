@@ -29,7 +29,7 @@ interface JobRecord {
   workdirKey: string;
   workingDirectorySnapshot: string | null;
   filesystemPermission: "read_only" | "workspace_write";
-  codexMode: "exec" | "reset_credit_status";
+  codexMode: "exec" | "reset_credit_status" | "usage_status";
   idempotencyKey: string;
   cloudTaskName: string | null;
   leaseOwner: string | null;
@@ -99,7 +99,7 @@ export class FirestoreJobRepository {
         workdirKey: input.workdirKey,
         workingDirectorySnapshot: null,
         filesystemPermission: input.filesystemPermission,
-        codexMode: input.kind === "reset_credit_status" ? "reset_credit_status" : "exec",
+        codexMode: input.kind === "reset_credit_status" ? "reset_credit_status" : input.kind === "usage_status" ? "usage_status" : "exec",
         idempotencyKey: input.idempotencyKey,
         cloudTaskName: null,
         leaseOwner: null,
@@ -125,7 +125,7 @@ export class FirestoreJobRepository {
       transaction.create(operationRef, {
         idempotencyKey: operationId,
         telegramUpdateId,
-        operationType: input.kind === "scheduled" ? "schedule_job" : input.kind === "reset_credit_status" ? "reset_credit_status" : "run_now",
+        operationType: input.kind === "scheduled" ? "schedule_job" : input.kind === "reset_credit_status" ? "reset_credit_status" : input.kind === "usage_status" ? "usage_status" : "run_now",
         resultingJobId: id,
         createdAt: timestamp,
         expiresAt: Timestamp.fromMillis(now.getTime() + 7 * 24 * 60 * 60 * 1000),
@@ -202,7 +202,7 @@ export class FirestoreJobRepository {
       query = query.startAfter(cursor);
     }
     const snapshot = await query.get();
-    const filtered = snapshot.docs.filter((document) => (document.data() as JobRecord).kind !== "reset_credit_status");
+    const filtered = snapshot.docs.filter((document) => !(["reset_credit_status", "usage_status"] as JobKind[]).includes((document.data() as JobRecord).kind));
     const visible = filtered.slice(0, limit);
     return {
       jobs: visible.map((document) => summarize(document.data() as JobRecord)),

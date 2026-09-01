@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const filesystemPermissionSchema = z.enum(["read_only", "workspace_write"]);
-export const jobKindSchema = z.enum(["scheduled", "immediate", "reset_credit_status"]);
+export const jobKindSchema = z.enum(["scheduled", "immediate", "reset_credit_status", "usage_status"]);
 export const jobStatusSchema = z.enum([
   "scheduled",
   "pending_wake",

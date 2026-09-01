@@ -24,6 +24,7 @@ This repository is useful when you want to:
 - run Codex inside a specific server-side project clone;
 - receive the final result in the same private Telegram chat;
 - check available banked Codex resets and their expiry dates from Telegram;
+- check the current 5-hour and weekly usage windows and their reset times;
 - automatically shut the VM down after the queue is empty.
 
 The current implementation supports **Codex CLI only**. It does not currently run
@@ -528,7 +529,7 @@ type JobStatus =
 
 interface JobDocument {
   id: string;
-  kind: "scheduled" | "immediate";
+  kind: "scheduled" | "immediate" | "reset_credit_status" | "usage_status";
   status: JobStatus;
   telegramUserId: string;
   telegramChatId: string;
@@ -538,7 +539,7 @@ interface JobDocument {
   workdirKey: string;
   workingDirectorySnapshot: string | null;
   filesystemPermission: "read_only" | "workspace_write";
-  codexMode: "exec";
+  codexMode: "exec" | "reset_credit_status" | "usage_status";
   idempotencyKey: string;
   cloudTaskName: string | null;
   leaseOwner: string | null;
@@ -766,11 +767,13 @@ WORKER_DISABLE_SHUTDOWN=false
 CODEX_USAGE_TIMEOUT_SECONDS=20
 ```
 
-`CODEX_USAGE_TIMEOUT_SECONDS` bounds the **Codex banked resets** check. The
+`CODEX_USAGE_TIMEOUT_SECONDS` bounds both Codex status checks. The
 worker starts the locally installed `codex app-server` process over stdio and
-calls `account/rateLimits/read`. It reads only `rateLimitResetCredits`, then
-formats the authoritative available count and each returned `expiresAt` value in
-the user's timezone. The normal 5-hour and weekly usage percentages are ignored.
+calls `account/rateLimits/read`. **Codex banked resets** reads
+`rateLimitResetCredits` and formats the authoritative available count plus each
+returned `expiresAt`. **Codex usage limits** separately formats the primary and
+secondary windows—the percentage used, percentage left, and reset time—for the
+5-hour and weekly limits. Both use the user's timezone.
 No private ChatGPT URL, access token parsing, browser automation, or desktop-UI
 scraping is required.
 
@@ -1007,8 +1010,9 @@ Preserve the existing button experience while removing long polling.
 2. Adapt Telegraf to the Firebase HTTPS request/response lifecycle.
 3. Add webhook secret validation before Telegraf middleware.
 4. Add allowlist middleware before every handler.
-5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/usage` (with the legacy
-   `/reset_credits` alias), `/jobs`,
+5. Port `/start`, `/menu`, `/schedule`, `/run_now`, `/usage` and `/usage_limits`
+   for 5-hour/weekly limits, `/banked_resets` (with the legacy `/reset_credits`
+   alias), `/jobs`,
    `/cancel`, `/settings`, and `/help`.
 6. Port the reply keyboard and inline callback keyboards.
 7. Replace in-process/SQLite draft access with Firestore repositories.
@@ -1909,7 +1913,9 @@ The output must be `TERMINATED`. In Telegram:
 6. wait through the drain grace and verify the VM returns to `TERMINATED`;
 7. click **Codex banked resets** and verify Telegram sends exactly one result
    with the available banked-reset count and expiry dates;
-8. use **Schedule say "hi"** several minutes ahead and verify the same full cycle;
+8. click **Codex usage limits** and verify the 5-hour and weekly percentages plus
+   their reset times, without banked-reset details;
+9. use **Schedule say "hi"** several minutes ahead and verify the same full cycle;
 9. create then cancel a future job and verify the VM never starts for it.
 
 Do not press confirmation twice to “help” a slow boot. Confirmation is idempotent,
@@ -2005,6 +2011,7 @@ used if unrelated resources were placed in the project.
 - [x] Workspace-write requires warning and confirmation.
 - [x] Result reaches Telegram.
 - [x] Codex banked resets button returns only the available count and expiry dates.
+- [x] Codex usage limits button returns the 5-hour and weekly windows separately.
 - [x] VM stops after queue drain.
 
 ### Reliability
