@@ -4,6 +4,10 @@
 > Never put a Telegram token, Codex credential, Google refresh token, or service-account
 > key in this repository.
 
+I built this bot for my own personal use. I am exploring a commercial version for
+a wider audience, where each user could sign in with their own Codex account and
+use the bot independently. This is a future direction, not an available service.
+
 ## Main goal
 
 The primary goal is to let you send a Codex instruction whenever you want from
@@ -316,8 +320,6 @@ and heartbeat for operational diagnosis.
 - **Host isolation:** an unprivileged worker, root-owned directory mappings,
   IAP-based SSH, and no public Codex listener. A root-owned systemd unit performs
   shutdown; the worker retains `NoNewPrivileges=true` and has no sudo rule.
-
-Never commit bot tokens, Codex credentials, refresh tokens, or service-account keys.
 
 ## Repository layout
 
