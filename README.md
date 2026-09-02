@@ -10,24 +10,25 @@ use the bot independently. This is a future direction, not an available service.
 
 ## Main goal
 
-The primary goal is to let you send a Codex instruction whenever you want from
-your phone, without keeping your personal computer powered on 24/7. Telegram is
-the remote control; a normally stopped cloud VM wakes only for the requested job,
-runs Codex, returns the result to the phone, and shuts down again. This is
-especially useful for banked Codex resets: from your phone, you can see how many
-earned resets are available and when each one expires before using one to reset
-the eligible 5-hour and weekly limits.
+The primary goal is to use Codex's five-hour usage windows more efficiently around
+your working hours, without waking up early or leaving your computer running.
+Telegram acts as the remote control: schedule a message from your phone, and a
+normally stopped cloud VM wakes up, runs Codex, returns the result, and shuts down.
 
-A primary use case is making the five-hour window work around your day instead
-of arranging your day around it. For example, schedule a tiny Codex task such as
-`say "hi"` for early morning, before you wake up. The cloud VM starts by itself,
-runs the message, sends the result to Telegram, and powers off. You do not need
-to wake up just to send the first message, configure cron on your personal
-computer, or leave that computer running all night. When you later begin a
-focused one- or two-hour work session, the active five-hour window is already
-further along and can reset sooner than if your first message had been sent only
-when you started working. Exact quotas and reset behavior still depend on the
-current Codex plan shown in the app.
+For example, schedule `say "hi"` for **6:00 AM**. If that message starts a new
+five-hour usage window, its reset falls around **11:00 AM**. When you start working
+at **10:00 AM**, you can use the remaining allowance for an hour before the window
+resets. Starting the window with your first message at 10:00 AM would instead put
+that reset around 3:00 PM. The benefit is aligning the usage window with your day.
+
+The bot handles the early message automatically. You do not need to wake up at
+6:00 AM to send it yourself, or keep your computer on overnight to run a cron job.
+The actual reset time depends on when execution starts and the account's current
+usage window; check **Codex usage limits** for the reset time reported by Codex.
+
+Separately, you can check **Codex banked resets** whenever you want to see your
+available reset credits and their expiry dates. Scheduling the morning message
+uses the normal usage window and does not redeem a banked reset.
 
 ## Features
 
