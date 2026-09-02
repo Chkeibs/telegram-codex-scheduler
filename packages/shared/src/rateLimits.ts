@@ -67,7 +67,7 @@ export function formatCodexRateLimitsForTelegram(snapshot: CodexRateLimitsSnapsh
     "Codex usage limits",
     ...windows.flatMap((window) => [
       "",
-      `${windowLabel(window.windowDurationMins)}: ${formatPercent(window.usedPercent)} used (${formatPercent(Math.max(0, 100 - window.usedPercent))} left)`,
+      `${windowLabel(window.windowDurationMins)}: ${formatPercent(Math.max(0, 100 - window.usedPercent))} left (${formatPercent(window.usedPercent)} used)`,
       `Resets: ${formatResetTime(window.resetsAt, timezone)}`,
     ]),
   ];

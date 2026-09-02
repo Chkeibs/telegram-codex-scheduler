@@ -56,7 +56,7 @@ describe("result delivery", () => {
   });
 
   it("sends usage-limit results as plain Telegram text", async () => {
-    const output = "Codex usage limits\n\n5-hour limit: 10% used (90% left)\nResets: 01 Sep 2026, 21:21 (Europe/Paris)";
+    const output = "Codex usage limits\n\n5-hour limit: 90% left (10% used)\nResets: 01 Sep 2026, 21:21 (Europe/Paris)";
     const repository = {
       claim: vi.fn(async () => ({ jobId: "job", kind: "usage_status" as const, telegramChatId: "1", status: "completed" as const, outputPreview: output, errorPreview: null, resultObjectName: null, outputMode: "preview" as const, maxOutputChars: 3500, attempt: 1 })),
       markSent: vi.fn(async () => undefined),

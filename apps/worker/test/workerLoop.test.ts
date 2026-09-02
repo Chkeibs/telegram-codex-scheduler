@@ -124,10 +124,10 @@ describe("WorkerLoop", () => {
     expect(jobs.complete).toHaveBeenCalledWith(usageJob, [
       "Codex usage limits",
       "",
-      "5-hour limit: 43% used (57% left)",
+      "5-hour limit: 57% left (43% used)",
       "Resets: 01 Sep 2026, 08:37 (Asia/Beirut)",
       "",
-      "Weekly limit: 29% used (71% left)",
+      "Weekly limit: 71% left (29% used)",
       "Resets: 07 Sep 2026, 05:25 (Asia/Beirut)",
     ].join("\n"), null, 0, 0, "");
     expect(runner.run).not.toHaveBeenCalled();
