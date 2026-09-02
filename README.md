@@ -23,8 +23,7 @@ that reset around 3:00 PM. The benefit is aligning the usage window with your da
 
 The bot handles the early message automatically. You do not need to wake up at
 6:00 AM to send it yourself, or keep your computer on overnight to run a cron job.
-The actual reset time depends on when execution starts and the account's current
-usage window; check **Codex usage limits** for the reset time reported by Codex.
+The actual reset time depends on execution and the current window; check **Codex usage limits**.
 
 Separately, you can check **Codex banked resets** whenever you want to see your
 available reset credits and their expiry dates. Scheduling the morning message
@@ -74,9 +73,8 @@ project folders, and local Codex login across stop/start cycles.
 
 ## Implementation walkthrough
 
-The following sections follow a request from the Telegram interface to VM shutdown.
-Code excerpts come from the current implementation, shortened where indicated;
-linked source files contain the complete handlers and error paths.
+Follow a request from Telegram to VM shutdown through excerpts of the current code.
+Linked sources contain complete handlers and error paths; shortened excerpts are marked.
 
 ### 1. Telegram menus and persistent drafts
 
@@ -125,7 +123,6 @@ the VM; it must be cloned and configured there before use.
 
 Read-only is the default permission. Choosing workspace-write displays a warning
 and requires an explicit acknowledgement before the final job confirmation.
-The selected permission becomes the `--sandbox` argument passed to Codex.
 
 ### 3. Durable jobs and duplicate protection
 
@@ -187,9 +184,7 @@ then delegates to [ComputeService](apps/functions/src/services/computeService.ts
 | `RUNNING` | Mark the job pending for the worker |
 | `STOPPING` | Enqueue a delayed state check before attempting another start |
 
-The boot lead is a startup allowance, not a precise execution-time guarantee.
-The worker's due-time query prevents early execution; cold starts and earlier jobs
-can delay a task beyond its scheduled time.
+The worker prevents early execution; cold starts and earlier jobs can delay a task.
 
 ### 5. Transactional claims and Codex execution
 
@@ -261,6 +256,16 @@ explicitly. Dates use the user's saved timezone. Both actions only read account
 status; neither redeems a reset credit. Returned fields depend on the installed
 Codex version and authenticated account.
 
+**Earlier approach.** Before I could view these details in Codex desktop, I built
+[a reader](apps/worker/src/codexResetCreditsReader.ts) that used the VM's local
+`~/.codex/auth.json` to authenticate a request to ChatGPT's undocumented
+`/backend-api/wham/rate-limit-reset-credits` endpoint. It extracted the available
+credit count and expiry dates, then returned them through Telegram. Once those
+fields became available through the local App Server, I switched to that interface
+to remove direct token handling and the dependency on a private HTTP endpoint.
+The old reader is inactive; [the original design](README_RESET_CREDITS_FEATURE.md)
+is preserved for context.
+
 ### 7. Results, attachments, and notification retries
 
 After execution, the worker sanitizes captured output, uploads a bounded text
@@ -316,8 +321,6 @@ and heartbeat for operational diagnosis.
   receive the Telegram token, and Functions do not receive Codex auth files.
 - **Cloud access:** separate service accounts for ingress, wake-up, task invocation,
   execution, and delivery; attached identities instead of downloaded JSON keys.
-- **Execution:** `spawn` with fixed arguments and `shell: false`, an allowlisted
-  environment for `codex exec`, validated real paths, and sanitized, bounded output.
 - **Host isolation:** an unprivileged worker, root-owned directory mappings,
   IAP-based SSH, and no public Codex listener. A root-owned systemd unit performs
   shutdown; the worker retains `NoNewPrivileges=true` and has no sudo rule.
@@ -334,9 +337,6 @@ infra/vm/          Worker installer and environment template
 .github/workflows/ CI validation
 docs/              Deployment and operational guide
 ```
-
-The repository uses npm workspaces to share domain types and validation between
-the Functions control plane and the VM worker. Tests sit alongside each workspace.
 
 ## Local development and validation
 
